@@ -9,8 +9,8 @@ public class HybridAStar : MonoBehaviour
     private static float maxSteeringAngle = 40f;
     private static float[] steeringAngles = new float[] { -maxSteeringAngle, 0f, maxSteeringAngle };
 
-    private float positionAccuracy = 1f;
-    private float angleAccuracy = 10f;
+    private float positionAccuracy = 0.5f;
+    private float angleAccuracy = 5f;
 
     private float headingAngleResolution = 15f;
 
@@ -109,7 +109,7 @@ public class HybridAStar : MonoBehaviour
 
         int flag = 0;
 
-        while(flag < 8000)
+        while(flag < 100000)
         {
             flag++;
 
@@ -243,7 +243,7 @@ public class HybridAStar : MonoBehaviour
         Node parent = node.parent;
 
         // Cost 0
-        // float costSoFar = parent.gCost;
+        float costSoFar = parent.gCost;
 
         // Cost 1
         float distanceCost = (node.rearWheelPosition - parent.rearWheelPosition).magnitude;
@@ -251,7 +251,7 @@ public class HybridAStar : MonoBehaviour
         // Cost 2 - Voronoi Cost
 
         // Cost 3
-        float reverseCost = node.isReversing ? 2f : 0f;
+        float reverseCost = node.isReversing ? 0.5f : 0f;
 
         // Cost 4
         float switchMotionCost = 0f;
@@ -261,7 +261,7 @@ public class HybridAStar : MonoBehaviour
             switchMotionCost = 0.5f;
         }
 
-        return parent.gCost + distanceCost * (1f + reverseCost) + switchMotionCost;
+        return costSoFar + distanceCost * (1f + reverseCost) + switchMotionCost;
     }
 
     private static List<Node> RetracePath(Node finalNode)

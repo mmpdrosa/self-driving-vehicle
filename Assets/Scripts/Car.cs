@@ -12,6 +12,7 @@ public class Car : MonoBehaviour
     public static float width = 2.189f;
     public static float height = 1.431f;
     public static float wheelBase = 2.96f;
+    public static float turningRadius = 5.9f;
 
     private void Awake()
     {
@@ -22,7 +23,7 @@ public class Car : MonoBehaviour
     void Start()
     {
 
-    }
+    }   
     void Update()
     {
         headingAngle = transform.eulerAngles.y;
@@ -66,7 +67,8 @@ public class Car : MonoBehaviour
         }
         else
         {
-            float R = driveDistance / turningAngle;
+            // float R = driveDistance / turningAngle;
+            float R = turningRadius;
 
             float cx = rearWheelPosition.x + Mathf.Cos(headingAgle) * R;
             float cz = rearWheelPosition.z - Mathf.Sin(headingAgle) * R;
@@ -74,8 +76,6 @@ public class Car : MonoBehaviour
             newRearWheelPos.x = cx - Mathf.Cos(headingAgle + turningAngle) * R;
             newRearWheelPos.z = cz + Mathf.Sin(headingAgle + turningAngle) * R;
         }
-
-        Debug.Log(newRearWheelPos);
 
         return newRearWheelPos;
     }

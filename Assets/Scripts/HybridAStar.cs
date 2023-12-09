@@ -109,7 +109,7 @@ public class HybridAStar : MonoBehaviour
 
         int flag = 0;
 
-        while(flag < 100000)
+        while(flag < 1000000)
         {
             flag++;
 
@@ -227,6 +227,11 @@ public class HybridAStar : MonoBehaviour
                 );
 
                 float gCost = GetCostToReachNode(childNode);
+
+                // wheel cost
+                // gCost += steeringAngle != 0 ? 0.2f : 0;
+
+
                 float hCost = grid.data[childCell.x, childCell.y].heuristics;
 
                 childNode.AddCosts(gCost, hCost);

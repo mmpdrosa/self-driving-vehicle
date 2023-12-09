@@ -1,8 +1,5 @@
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
-using Unity.VisualScripting;
 using UnityEngine;
 
 using Path = System.Collections.Generic.List<PathSegment>;
@@ -12,14 +9,28 @@ public class ReedsShepp : MonoBehaviour
     [SerializeField]
     private Car startCar, endCar;
 
+    PathDrawer drawer;
+
+    void Awake()
+    {
+        drawer = GetComponent<PathDrawer>();    
+    }
+
     void Start()
     {
         Path path = GetOptimalPath(startCar, endCar);
 
-        foreach (PathSegment segment in path)
-        {
-            Debug.Log(segment.ToString());
-        }
+        Debug.Log(startCar.rearWheelPosition + " " + endCar.rearWheelPosition);
+
+        drawer.Draw(
+            startCar.rearWheelPosition.x,
+            startCar.rearWheelPosition.z,
+            startCar.headingAngle,
+            endCar.rearWheelPosition.x,
+            endCar.rearWheelPosition.z,
+            endCar.headingAngle,
+            path
+        );
     }
 
     void Update()
@@ -49,6 +60,7 @@ public class ReedsShepp : MonoBehaviour
 
         List<Path> paths = new List<Path>();
 
+        // somar 90 no ângulo pq 0 graus do algoritmo é 90 graus no unity
         (float x, float y, float theta) = ChangeOfBasis(
             startCar.rearWheelPosition.x,
             startCar.rearWheelPosition.z,
@@ -56,7 +68,7 @@ public class ReedsShepp : MonoBehaviour
             endCar.rearWheelPosition.x,
             endCar.rearWheelPosition.z,
             endCar.headingAngle + 90f,
-            6f
+            5.9f
         );
 
         foreach (var getPath in pathFuncs)
@@ -151,7 +163,7 @@ public class ReedsShepp : MonoBehaviour
             {
                 new PathSegment(t, PathSegment.Steering.Left, PathSegment.Gear.Forward),
                 new PathSegment(u, PathSegment.Steering.Straight, PathSegment.Gear.Forward),
-                new PathSegment(v, PathSegment.Steering.Left, PathSegment.Gear.Forward)
+                new PathSegment(v, PathSegment.Steering.Right, PathSegment.Gear.Forward)
             };
         }
 

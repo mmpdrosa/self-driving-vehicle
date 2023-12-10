@@ -20,7 +20,7 @@ public class ReedsShepp : MonoBehaviour
     {
         Path path = GetOptimalPath(startCar, endCar);
 
-        Debug.Log(startCar.rearWheelPosition + " " + endCar.rearWheelPosition);
+        Debug.Log(startCar.rearWheelPosition + " " + startCar.headingAngle + " " + endCar.rearWheelPosition);
 
         drawer.Draw(
             startCar.rearWheelPosition.x,
@@ -64,10 +64,10 @@ public class ReedsShepp : MonoBehaviour
         (float x, float y, float theta) = ChangeOfBasis(
             startCar.rearWheelPosition.x,
             startCar.rearWheelPosition.z,
-            startCar.headingAngle + 90f,
+            90f - startCar.headingAngle,
             endCar.rearWheelPosition.x,
             endCar.rearWheelPosition.z,
-            endCar.headingAngle + 90f,
+            90f - endCar.headingAngle,
             5.9f
         );
 

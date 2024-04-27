@@ -35,8 +35,6 @@ public class PathDrawer : MonoBehaviour
 
         foreach (PathSegment segment in path)
         {
-            Debug.Log(segment);
-
             switch (segment.steering)
             {
 

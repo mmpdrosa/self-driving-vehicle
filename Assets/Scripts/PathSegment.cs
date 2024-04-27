@@ -1,8 +1,3 @@
-using System.Collections;
-using System.Collections.Generic;
-using Unity.VisualScripting;
-using UnityEngine;
-
 public class PathSegment
 {
     public enum Steering { Left = -1, Straight = 0, Right = 1 };
@@ -21,7 +16,7 @@ public class PathSegment
 
     public override string ToString()
     {
-        return $"{{ Steering: {steering}\tGear: {gear}\tDistance: {distance} }}";
+        return $"{{Steering: {steering}\tGear: {gear}\tDistance: {distance}}}";
     }
 
     public void ReverseSteering()

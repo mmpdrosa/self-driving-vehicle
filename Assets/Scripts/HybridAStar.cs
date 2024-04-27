@@ -1,57 +1,26 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using static PathSegment;
 
 public class HybridAStar : MonoBehaviour
 {
     private static float driveDistance = Mathf.Sqrt(Mathf.Pow(0.5f, 2) * 2f) + 0.01f;
-    private static float[] driveDistances = new float[] { -driveDistance, driveDistance };
 
-    private static float maxSteeringAngle = 40f;
-    private static float[] steeringAngles = new float[] { -maxSteeringAngle, 0f, maxSteeringAngle };
+    private float positionAccuracy = 0.5f; // meters
+    private float angleAccuracy = 5f; // degrees
 
-    private float positionAccuracy = 0.5f;
-    private float angleAccuracy = 5f;
-
-    private float headingAngleResolution = 15f;
-
-    private Grid grid;
-
-    public Car startCar, endCar;
+    private float headingAngleResolution = 15f; // degrees
 
     private List<Node> finalPath;
 
     List<Node> expandedNodes;
 
-    LineRenderer lineRenderer;
-
-    void Start()
-    {
-        grid = GetComponent<Grid>();
-        lineRenderer = GetComponent<LineRenderer>();
-
-        for (int i = 0; i < grid.width; i++)
-        {
-            for (int j = 0; j < grid.height; j++)
-            {
-                Cell currentCell = grid.data[i, j];
-
-                currentCell.heuristics = (endCar.rearWheelPosition - currentCell.position).magnitude;
-            }
-        }
-
-        expandedNodes = new List<Node>();
-
-        FindPath(grid, startCar, endCar);
-    }
-
-    void Update()
-    {
-
-    }
+    private AStartGrid grid;
 
     private void OnDrawGizmos()
     {
-        DisplaySearchTree();
+        //DisplaySearchTree();
 
         Gizmos.color = Color.red;
 
@@ -71,12 +40,15 @@ public class HybridAStar : MonoBehaviour
         }
     }
 
-    private void FindPath(Grid grid, Car startCar, Car endCar)
+    public void FindPath(AStartGrid _grid, Car startCar, Car endCar)
     {
+        grid = _grid;
+
         Heap<Node> openSet = new Heap<Node>(100000);
         HashSet<int>[,] analyzedCellHeadingAnglesGrid = new HashSet<int>[grid.width, grid.height];
         Dictionary<int, Node>[,] lowestCostNodeByAngleGrid = new Dictionary<int, Node>[grid.width, grid.height];
 
+        expandedNodes = new List<Node>();
 
         for (int i = 0; i < grid.width;  i++)
         {
@@ -87,7 +59,12 @@ public class HybridAStar : MonoBehaviour
             }
         }
 
-        IntVector2 startCell = grid.GetCellFromWorldPosition(startCar.rearWheelPosition);
+        AStarCell startCell = grid.GetCellFromWorldPosition(startCar.rearWheelPosition);
+
+        if (startCell == null)
+        {
+            return;
+        }
 
         Node startNode = new Node(
             parent: null,
@@ -98,28 +75,38 @@ public class HybridAStar : MonoBehaviour
 
         startNode.AddCosts(
             gCost: 0f,
-            hCost: grid.data[startCell.x, startCell.y].heuristics
+            hCost: startCell.fCost
         );
 
         openSet.Add(startNode);
 
-        IntVector2 goalCell = grid.GetCellFromWorldPosition(endCar.rearWheelPosition);
+        AStarCell goalCell = grid.GetCellFromWorldPosition(endCar.rearWheelPosition);
+
+        if (goalCell == null)
+        {
+            return;
+        }
 
         Node finalNode = null;
 
         int flag = 0;
 
-        while(flag < 1000000)
+        while(flag < 100000)
         {
             flag++;
 
             Node currentNode = openSet.RemoveFirst();
 
-            IntVector2 currentCell = grid.GetCellFromWorldPosition(currentNode.rearWheelPosition);
+            AStarCell currentCell = grid.GetCellFromWorldPosition(currentNode.rearWheelPosition);
+
+            if (currentCell == null)
+            {
+                continue;
+            }
 
             int roundedHeadingAngle = RoundValueByStep(currentNode.headingAgle, headingAngleResolution);
 
-            HashSet<int> analyzedCellHeadingAngles = analyzedCellHeadingAnglesGrid[currentCell.x, currentCell.y];
+            HashSet<int> analyzedCellHeadingAngles = analyzedCellHeadingAnglesGrid[currentCell.gridPosition.x, currentCell.gridPosition.y];
 
             if (!analyzedCellHeadingAngles.Contains(roundedHeadingAngle))
             {
@@ -130,6 +117,8 @@ public class HybridAStar : MonoBehaviour
             }
 
             expandedNodes.Add(currentNode);
+
+            // yield return new WaitForSeconds(0.001f);
 
             float distanceToGoal = (currentNode.rearWheelPosition - endCar.rearWheelPosition).sqrMagnitude;
 
@@ -146,11 +135,16 @@ public class HybridAStar : MonoBehaviour
 
             foreach ( Node child in children )
             {
-                IntVector2 childCell = grid.GetCellFromWorldPosition(child.rearWheelPosition);
+                AStarCell childCell = grid.GetCellFromWorldPosition(child.rearWheelPosition);
+
+                if (childCell == null)
+                {
+                    continue;
+                }
 
                 int roundedChildHeadingAngle = RoundValueByStep(child.headingAgle, headingAngleResolution);
 
-                HashSet<int> analyzedChildCellHeadingAngles = analyzedCellHeadingAnglesGrid[childCell.x, childCell.y];
+                HashSet<int> analyzedChildCellHeadingAngles = analyzedCellHeadingAnglesGrid[childCell.gridPosition.x, childCell.gridPosition.y];
 
                 if (analyzedChildCellHeadingAngles.Contains(roundedChildHeadingAngle))
                 {
@@ -159,7 +153,7 @@ public class HybridAStar : MonoBehaviour
 
                 float childCost = child.gCost;
 
-                Dictionary<int, Node> lowestCostNodeByAngle = lowestCostNodeByAngleGrid[childCell.x, childCell.y];
+                Dictionary<int, Node> lowestCostNodeByAngle = lowestCostNodeByAngleGrid[childCell.gridPosition.x, childCell.gridPosition.y];
 
                 if (lowestCostNodeByAngle.ContainsKey(roundedChildHeadingAngle))
                 {
@@ -200,30 +194,28 @@ public class HybridAStar : MonoBehaviour
     {
         List<Node> children = new List<Node>();
 
-        for (int i = 0; i < driveDistances.Length; i++) 
+        foreach (Gear gear in System.Enum.GetValues(typeof(Gear)))
         {
-            float driveDistance = driveDistances[i];
-
-            for (int j = 0; j < steeringAngles.Length; j++)
+            foreach (Steering steering in System.Enum.GetValues(typeof(Steering)))
             {
-                float steeringAngle = steeringAngles[j];
+                PathSegment pathSegment = new PathSegment(driveDistance, steering, gear);
 
-                Vector3 childRearWheelPosition = Car.CalculatePositionAfterMovement(node.rearWheelPosition, node.headingAgle, driveDistance, steeringAngle);
+                Vector3 childRearWheelPosition = Car.CalculatePositionAfterMovement(node.rearWheelPosition, node.headingAgle, pathSegment);
 
-                float childHeadingAngle = Car.CalculateHeadingAngleAfterMovement(node.headingAgle, driveDistance, steeringAngle);
+                float childHeadingAngle = Car.CalculateHeadingAngleAfterMovement(node.headingAgle, pathSegment);
 
-                IntVector2 childCell = grid.GetCellFromWorldPosition(childRearWheelPosition);
-
-                if(!grid.IsCellValid(childCell))
+                if (!grid.IsPositionWalkable(childRearWheelPosition))
                 {
                     continue;
                 }
+
+                AStarCell childCell = grid.GetCellFromWorldPosition(childRearWheelPosition);
 
                 Node childNode = new Node(
                     parent: node,
                     rearWheelPosition: childRearWheelPosition,
                     headingAngle: childHeadingAngle,
-                    isReversing: driveDistance < 0f ? true : false
+                    isReversing: gear == Gear.Backward
                 );
 
                 float gCost = GetCostToReachNode(childNode);
@@ -232,7 +224,7 @@ public class HybridAStar : MonoBehaviour
                 // gCost += steeringAngle != 0 ? 0.2f : 0;
 
 
-                float hCost = grid.data[childCell.x, childCell.y].heuristics;
+                float hCost = childCell.fCost;
 
                 childNode.AddCosts(gCost, hCost);
 
@@ -253,12 +245,8 @@ public class HybridAStar : MonoBehaviour
         // Cost 1
         float distanceCost = (node.rearWheelPosition - parent.rearWheelPosition).magnitude;
 
-        // Cost 2 - Voronoi Cost
+        float reverseCost = node.isReversing ? 1.5f : 0f;
 
-        // Cost 3
-        float reverseCost = node.isReversing ? 0.5f : 0f;
-
-        // Cost 4
         float switchMotionCost = 0f;
 
         if ((node.isReversing && !parent.isReversing) || (!node.isReversing && parent.isReversing))
@@ -266,7 +254,7 @@ public class HybridAStar : MonoBehaviour
             switchMotionCost = 0.5f;
         }
 
-        return costSoFar + distanceCost * (1f + reverseCost) + switchMotionCost;
+        return costSoFar + distanceCost + reverseCost + switchMotionCost;
     }
 
     private static List<Node> RetracePath(Node finalNode)
@@ -289,21 +277,23 @@ public class HybridAStar : MonoBehaviour
 
     public void DisplaySearchTree()
     {
-        if (expandedNodes != null)
+        if (expandedNodes == null)
         {
-            for (int i = 0; i < expandedNodes.Count; i++)
+            return;
+        }
+
+        for (int i = 0; i < expandedNodes.Count; i++)
+        {
+            Node currentNode = expandedNodes[i];
+
+            if (currentNode.parent == null)
             {
-                Node currentNode = expandedNodes[i];
-
-                if (currentNode.parent == null)
-                {
-                    continue;
-                }
-
-                Gizmos.color = currentNode.isReversing ? Color.cyan : Color.green;
-
-                Gizmos.DrawLine(currentNode.rearWheelPosition, currentNode.parent.rearWheelPosition);
+                continue;
             }
+
+            Gizmos.color = currentNode.isReversing ? Color.cyan : Color.green;
+
+            Gizmos.DrawLine(currentNode.rearWheelPosition, currentNode.parent.rearWheelPosition);
         }
     }
 }

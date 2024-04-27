@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using System;
 
 using Path = System.Collections.Generic.List<PathSegment>;
 
@@ -18,9 +19,24 @@ public class ReedsShepp : MonoBehaviour
 
     void Start()
     {
-        Path path = GetOptimalPath(startCar, endCar);
+        //Path path = GetOptimalPath(startCar, endCar);
 
-        Debug.Log(startCar.rearWheelPosition + " " + startCar.headingAngle + " " + endCar.rearWheelPosition);
+        //Debug.Log(startCar.rearWheelPosition + " " + startCar.headingAngle + " " + endCar.rearWheelPosition);
+
+        //drawer.Draw(
+        //    startCar.rearWheelPosition.x,
+        //    startCar.rearWheelPosition.z,
+        //    startCar.headingAngle,
+        //    endCar.rearWheelPosition.x,
+        //    endCar.rearWheelPosition.z,
+        //    endCar.headingAngle,
+        //    path
+        //);
+    }
+
+    void Update()
+    {
+        Path path = GetOptimalPath(startCar, endCar);
 
         drawer.Draw(
             startCar.rearWheelPosition.x,
@@ -31,11 +47,6 @@ public class ReedsShepp : MonoBehaviour
             endCar.headingAngle,
             path
         );
-    }
-
-    void Update()
-    {
-        
     }
 
     private float PathLength(Path path)
@@ -55,12 +66,12 @@ public class ReedsShepp : MonoBehaviour
 
     public List<Path> GetAllPaths(Car startCar, Car endCar)
     {
-        List<System.Func<float, float, float, Path>> pathFuncs = new List<System.Func<float, float, float, Path>> 
+        List<Func<float, float, float, Path>> pathFuncs = new List<Func<float, float, float, Path>> 
         { Path1, Path2, Path3, Path4, Path5, Path6, Path7, Path8, Path9, Path10, Path11, Path12 };
 
         List<Path> paths = new List<Path>();
 
-        // somar 90 no ângulo pq 0 graus do algoritmo é 90 graus no unity
+        // 90 graus menos o angulo de heading
         (float x, float y, float theta) = ChangeOfBasis(
             startCar.rearWheelPosition.x,
             startCar.rearWheelPosition.z,

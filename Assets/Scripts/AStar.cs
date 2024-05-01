@@ -1,51 +1,54 @@
-using System.Collections;
 using System.Collections.Generic;
-using UnityEngine;
 
 public class AStar
 {
-    AStarCell[,] cells;
+    private readonly AStartGrid _grid;
 
-    public AStar(AStarCell[,] _cells)
+    private readonly AStarCell[,] _cells;
+
+    public AStar(AStartGrid grid)
     {
-        cells = _cells;
+        _grid = grid;
+        _cells = grid.Cells;
     }
 
     public List<AStarCell> Run(AStarCell startCell, AStarCell goalCell)
     {
-        Heap<AStarCell> openSet = new Heap<AStarCell>(10000000);
-        HashSet<AStarCell> closedSet = new HashSet<AStarCell>();
+        if (!_grid.IsPositionWalkable(startCell.Position) ||
+            !_grid.IsPositionWalkable(goalCell.Position))
+        {
+            return null;
+        }
 
+        Heap<AStarCell> openSet = new(_grid.MaxSize);
+        HashSet<AStarCell> closedSet = new();
 
         openSet.Add(startCell);
 
         while (openSet.Count > 0)
         {
-            AStarCell currentCell = openSet.RemoveFirst();
+            var currentCell = openSet.RemoveFirst();
+
             closedSet.Add(currentCell);
 
-            foreach (AStarCell neighbour in GetNeighbours(currentCell))
+            foreach (var neighbour in GetNeighbours(currentCell))
             {
-                if (!neighbour.walkable || closedSet.Contains(neighbour))
+                if (!neighbour.Walkable || closedSet.Contains(neighbour))
                 {
                     continue;
                 }
 
-                float gCost = currentCell.gCost + GetDistance(neighbour, currentCell);
+                var gCost = currentCell.gCost + AStartGrid.GetDistance(neighbour, currentCell);
 
                 if (gCost < neighbour.gCost || !openSet.Contains(neighbour))
                 {
                     neighbour.gCost = gCost;
-                    neighbour.hCost = GetDistance(goalCell, currentCell);
-                    neighbour.parent = currentCell;
+                    neighbour.hCost = AStartGrid.GetDistance(goalCell, currentCell);
+                    neighbour.Parent = currentCell;
 
                     if (!openSet.Contains(neighbour))
                     {
                         openSet.Add(neighbour);
-                    }
-                    else
-                    {
-                        // openSet.UpdateItem(neighbour);
                     }
                 }
             }
@@ -54,15 +57,15 @@ public class AStar
         return RetracePath(startCell, goalCell);
     }
 
-    List<AStarCell> RetracePath(AStarCell startCell, AStarCell goalCell)
+    private static List<AStarCell> RetracePath(AStarCell startCell, AStarCell goalCell)
     {
-        List<AStarCell> path = new List<AStarCell>();
-        AStarCell currentCell = goalCell;
+        List<AStarCell> path = new();
+        var currentCell = goalCell;
 
         while (currentCell != startCell)
         {
             path.Add(currentCell);
-            currentCell = currentCell.parent;
+            currentCell = currentCell.Parent;
         }
 
         path.Reverse();
@@ -70,30 +73,25 @@ public class AStar
         return path;
     }
 
-    public float GetDistance(AStarCell cellA, AStarCell cellB)
+    private List<AStarCell> GetNeighbours(AStarCell cell)
     {
-        return (cellA.position - cellB.position).magnitude;
-    }
+        List<AStarCell> neighbours = new();
 
-    public List<AStarCell> GetNeighbours(AStarCell cell)
-    {
-        List<AStarCell> neighbours = new List<AStarCell>();
-
-        for (int x = -1; x <= 1; x++)
+        for (var i = -1; i <= 1; i++)
         {
-            for (int y = -1; y <= 1; y++)
+            for (var j = -1; j <= 1; j++)
             {
-                if (x == 0 && y == 0)
+                if (i == 0 && j == 0)
                 {
                     continue;
                 }
 
-                int checkX = cell.gridPosition.x + x;
-                int checkY = cell.gridPosition.y + y;
+                var checkX = cell.GridPosition.x + i;
+                var checkY = cell.GridPosition.y + j;
 
-                if (checkX >= 0 && checkX < cells.GetLength(0) && checkY >= 0 && checkY < cells.GetLength(1))
+                if (checkX >= 0 && checkX < _cells.GetLength(0) && checkY >= 0 && checkY < _cells.GetLength(1))
                 {
-                    neighbours.Add(cells[checkX, checkY]);
+                    neighbours.Add(_cells[checkX, checkY]);
                 }
             }
         }

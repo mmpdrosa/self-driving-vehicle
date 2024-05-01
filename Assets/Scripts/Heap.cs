@@ -2,7 +2,6 @@ using System;
 
 public class Heap<T> where T : IHeapItem<T>
 {
-
     T[] items;
     int currentItemCount;
 
@@ -29,6 +28,13 @@ public class Heap<T> where T : IHeapItem<T>
         return firstItem;
     }
 
+    public void Remove(T item)
+    {
+        Swap(item, items[currentItemCount - 1]);
+        currentItemCount--;
+        SortDown(item);
+    }
+
     public void UpdateItem(T item)
     {
         SortUp(item);
@@ -36,10 +42,7 @@ public class Heap<T> where T : IHeapItem<T>
 
     public int Count
     {
-        get
-        {
-            return currentItemCount;
-        }
+        get { return currentItemCount; }
     }
 
     public bool Contains(T item)
@@ -75,13 +78,11 @@ public class Heap<T> where T : IHeapItem<T>
                 {
                     return;
                 }
-
             }
             else
             {
                 return;
             }
-
         }
     }
 
@@ -117,9 +118,5 @@ public class Heap<T> where T : IHeapItem<T>
 
 public interface IHeapItem<T> : IComparable<T>
 {
-    int HeapIndex
-    {
-        get;
-        set;
-    }
+    int HeapIndex { get; set; }
 }

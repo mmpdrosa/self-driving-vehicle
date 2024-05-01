@@ -2,63 +2,39 @@ using UnityEngine;
 
 public class Node : IHeapItem<Node>
 {
-    public float gCost;
-    public float hCost;
+    public Vector3 RearWheelPosition { get; set; }
+    public float HeadingAngle { get; set; }
+    public Movement MovementInfo { get; set; }
+    public Node Parent { get; set; }
 
-    public Node parent;
-    public Vector3 rearWheelPosition;
-    public float headingAgle;
-    public bool isReversing;
+    public float ChangingDirectionCost =>
+        Parent != null && Parent.MovementInfo.GearVal != MovementInfo.GearVal ? Constants.ChangingDirectionCost : 0;
 
-    public int heapIndex;
+    public float IsReversingCost => MovementInfo.GearVal == Movement.Gear.Backward ? Constants.ReversingCost : 0;
 
-    public Node(Node parent, Vector3 rearWheelPosition, float headingAngle, bool isReversing)
+    public float IsTurningCost => MovementInfo.SteeringVal != Movement.Steering.Straight ? Constants.TurningCost : 0;
+
+    public float ExpansionCost => MovementInfo.Distance + ChangingDirectionCost + IsReversingCost + IsTurningCost;
+
+    public float gCost => Parent != null ? Parent.gCost + ExpansionCost : 0;
+
+    public float hCost { get; set; }
+
+    public float fCost => gCost + hCost;
+
+    public int HeapIndex { get; set; }
+
+    public Node(Vector3 rearWheelPosition, float headingAngle, Movement movement, Node parent)
     {
-        this.parent = parent;
-        this.rearWheelPosition = rearWheelPosition;
-        this.headingAgle = headingAngle;
-        this.isReversing = isReversing;
-    }
-
-    public void AddCosts(float gCost, float hCost)
-    {
-        this.gCost = gCost;
-        this.hCost = hCost;
-    }
-
-    public void CopyData(Node other)
-    {
-        gCost = other.gCost;
-        hCost = other.hCost;
-        parent = other.parent;
-        rearWheelPosition = other.rearWheelPosition;
-        headingAgle = other.headingAgle;
-        isReversing = other.isReversing;
-    }
-
-    public float fCost
-    {
-        get
-        {
-            return gCost + hCost;
-        }
-    }
-
-    public int HeapIndex
-    {
-        get
-        {
-            return heapIndex;
-        }
-        set
-        {
-            heapIndex = value;
-        }
+        RearWheelPosition = rearWheelPosition;
+        HeadingAngle = headingAngle;
+        MovementInfo = movement;
+        Parent = parent;
     }
 
     public int CompareTo(Node other)
     {
-        int compare = fCost.CompareTo(other.fCost);
+        var compare = fCost.CompareTo(other.fCost);
 
         if (compare == 0)
         {

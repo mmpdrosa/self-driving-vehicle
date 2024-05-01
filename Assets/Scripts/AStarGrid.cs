@@ -1,153 +1,113 @@
-using System.Collections;
-using System.Collections.Generic;
-using UnityEditor;
+using System.Linq;
+using Unity.Burst.CompilerServices;
 using UnityEngine;
 
-public class AStartGrid : MonoBehaviour
+public class AStartGrid
 {
-    public AStarCell[,] cells;
-    private float cellSize = 0.5f;
-    public int width, height;
+    public int Width { get; set; }
+    public int Height { get; set; }
 
-    [SerializeField] private LayerMask unwalkableMask;
-    [SerializeField] private MeshRenderer floorMeshRenderer;
-    [SerializeField] private Car startCar, endCar;
+    private Vector3 _center;
 
-    private AStarCell startCell;
-    private AStarCell goalCell;
-    private AStar aStar;
+    public LayerMask UnwalkableMask;
 
-    private List<AStarCell> aStarPath;
+    public AStarCell[,] Cells;
 
-    private void Awake()
+    public int MaxSize => Width * Height;
+
+    public AStartGrid(int width, int height, Vector3 center, LayerMask unwalkableMask)
     {
-        Vector3 size = floorMeshRenderer.bounds.size;
-        width = Mathf.RoundToInt(size.x / cellSize);
-        height = Mathf.RoundToInt(size.z / cellSize);
+        Width = width;
+        Height = height;
 
-        CreateGrid();
+        _center = center;
+        UnwalkableMask = unwalkableMask;
 
-        aStar = new AStar(cells);
+        Init();
     }
 
-    private void OnDrawGizmos()
+    private void Init()
     {
-        // DisplayGrid();
-    }
+        Cells = new AStarCell[Width, Height];
 
-    public void CreateGrid()
-    {
-        cells = new AStarCell[width, height];
-
-        Vector3 center = floorMeshRenderer.bounds.center;
-
-        for (int i = 0; i < width; i++)
+        for (var i = 0; i < Width; i++)
         {
-            for (int j = 0; j < height; j++)
+            for (var j = 0; j < Height; j++)
             {
-                Vector3 position = new Vector3(
-                    i * cellSize - (width / 2 * cellSize) + center.x + cellSize / 2,
-                    0,
-                    j * cellSize - (height / 2 * cellSize) + center.z + cellSize / 2
+                Vector3 position = new(
+                    i * Constants.CellSize - Width / 2f * Constants.CellSize + _center.x + Constants.CellSize / 2,
+                    _center.y,
+                    j * Constants.CellSize - Height / 2f * Constants.CellSize + _center.z + Constants.CellSize / 2
                 );
 
-                bool walkable = !Physics.CheckSphere(position, cellSize, unwalkableMask);
+                var walkable = !CheckCollision(position);
 
-                cells[i, j] = new AStarCell(position, walkable, new Vector2Int(i, j));
+                Cells[i, j] = new AStarCell(new Vector2Int(i, j), position, walkable);
             }
         }
     }
 
-    private void ResetCells()
+    public bool CheckCollision(Vector3 position)
     {
-        foreach (AStarCell cell in cells)
-        {
-            cell.gCost = 0;
-            cell.hCost = 0;
-            cell.parent = null;
-        }
+        var collided =
+            Physics.CheckSphere(position, Mathf.Sqrt(Constants.CellSize * Constants.CellSize) * 2, UnwalkableMask);
+
+        return collided;
     }
 
-    public void Run()
+    public AStarCell GetCell(Vector3 position)
     {
-        startCell = GetCellFromWorldPosition(startCar.rearWheelPosition);
-        goalCell = GetCellFromWorldPosition(endCar.rearWheelPosition);
+        var relativePosition = position - _center;
 
-        if (IsPositionWalkable(startCar.rearWheelPosition) && IsPositionWalkable(endCar.rearWheelPosition))
-        {
-            ResetCells();
-            aStarPath = aStar.Run(startCell, goalCell);
+        var i = Mathf.FloorToInt((relativePosition.x + Width / 2f * Constants.CellSize) / Constants.CellSize);
+        var j = Mathf.FloorToInt((relativePosition.z + Height / 2f * Constants.CellSize) / Constants.CellSize);
 
-            foreach (AStarCell cell in cells)
-            {
-                cell.gCost += (cell.position - goalCell.position).magnitude;
-                // cell.hCost = 0;
-            }
-        }
-    }
-
-    public AStarCell GetCellFromWorldPosition(Vector3 worldPosition)
-    {
-        Vector3 center = floorMeshRenderer.bounds.center;
-        Vector3 relativePosition = worldPosition - center;
-
-        int i = Mathf.FloorToInt((relativePosition.x + width / 2 * cellSize) / cellSize);
-        int j = Mathf.FloorToInt((relativePosition.z + height / 2 * cellSize) / cellSize);
-
-        if (i < 0 || i >= width || j < 0 || j >= height)
+        if (i < 0 || i >= Width || j < 0 || j >= Height)
         {
             return null;
         }
 
-        return cells[i, j];
+        return Cells[i, j];
     }
 
-    public bool IsPositionWalkable(Vector3 worldPosition)
+    public bool IsPositionWalkable(Vector3 position)
     {
-        AStarCell cell = GetCellFromWorldPosition(worldPosition);
-        if (cell != null)
-        {
-            return cell.walkable;
-        }
-
-        return false;
+        return GetCell(position)?.Walkable == true;
     }
 
-    public void DisplayGrid()
+    public static float GetDistance(AStarCell cellA, AStarCell cellB)
     {
-        if (cells == null)
+        return (cellA.Position - cellB.Position).magnitude;
+    }
+
+    public void DrawGrid()
+    {
+        if (Cells == null)
         {
             return;
         }
 
-        float maxHeuristics = 0;
+        //var maxEuclideanDistance =
+        //    Cells.Cast<AStarCell>().Aggregate(0f, (max, cell) => Mathf.Max(max, cell.EuclideanDistance));
 
-        foreach (AStarCell cell in cells)
+        var maxHolonomicHeuristic =
+            Cells.Cast<AStarCell>().Aggregate(0f, (max, cell) => Mathf.Max(max, cell.HolonomicHeuristic));
+
+        foreach (var cell in Cells)
         {
-            if (cell.fCost > maxHeuristics)
-            {
-                maxHeuristics = cell.fCost;
-            }
-        }
+            //var t = Mathf.InverseLerp(0, maxEuclideanDistance, cell.EuclideanDistance);
 
-        foreach (AStarCell cell in cells)
-        {
-            float t = Mathf.InverseLerp(0, maxHeuristics, cell.fCost);
-            Color lerpedColor = Color.Lerp(Color.green, Color.red, t);
+            var t = Mathf.InverseLerp(0, maxHolonomicHeuristic, cell.HolonomicHeuristic);
 
-            Gizmos.color = cell.walkable ? lerpedColor : Color.red;
+            var lerpedColor = Color.Lerp(Color.green, Color.red, t);
 
-            if (aStarPath.Contains(cell))
-            {
-                Gizmos.color = Color.black;
-            }
+            Gizmos.color = cell.Walkable ? lerpedColor : Color.red;
 
-            if (cell == startCell || cell == goalCell)
-            {
-                Gizmos.color = Color.blue;
-            }
+            //Gizmos.color = cell.Walkable ? Color.white : Color.red;
 
-            Gizmos.DrawCube(cell.position, new Vector3(cellSize * 0.9f, 0, cellSize * 0.9f));
+            Vector3 size = new(Constants.CellSize, 0f, Constants.CellSize);
+
+            Gizmos.DrawWireCube(cell.Position, size);
         }
     }
 }

@@ -1,138 +1,94 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using System;
+using Path = System.Collections.Generic.List<Movement>;
 
-using Path = System.Collections.Generic.List<PathSegment>;
-
-public class ReedsShepp : MonoBehaviour
+public class ReedsShepp
 {
-    [SerializeField]
-    private Car startCar, endCar;
-
-    PathDrawer drawer;
-
-    void Awake()
+    private static float PathLength(Path path)
     {
-        drawer = GetComponent<PathDrawer>();    
+        return path.Sum(movement => movement.Distance);
     }
 
-    void Start()
+    public Path GetOptimalPath(float x1, float y1, float theta1, float x2, float y2, float theta2)
     {
-        //Path path = GetOptimalPath(startCar, endCar);
+        var paths = GetAllPaths(x1, y1, theta1, x2, y2, theta2);
 
-        //Debug.Log(startCar.rearWheelPosition + " " + startCar.headingAngle + " " + endCar.rearWheelPosition);
-
-        //drawer.Draw(
-        //    startCar.rearWheelPosition.x,
-        //    startCar.rearWheelPosition.z,
-        //    startCar.headingAngle,
-        //    endCar.rearWheelPosition.x,
-        //    endCar.rearWheelPosition.z,
-        //    endCar.headingAngle,
-        //    path
-        //);
-    }
-
-    void Update()
-    {
-        Path path = GetOptimalPath(startCar, endCar);
-
-        drawer.Draw(
-            startCar.rearWheelPosition.x,
-            startCar.rearWheelPosition.z,
-            startCar.headingAngle,
-            endCar.rearWheelPosition.x,
-            endCar.rearWheelPosition.z,
-            endCar.headingAngle,
-            path
-        );
-    }
-
-    private float PathLength(Path path)
-    {
-        return path.Sum(segment => segment.distance);
-    }
-
-
-    public Path GetOptimalPath(Car startCar, Car endCar)
-    {
-        List<Path> paths = GetAllPaths(startCar, endCar);
-
-        Path optimalPath = paths.OrderBy(PathLength).First();
+        var optimalPath = paths.OrderBy(PathLength).First();
 
         return optimalPath;
     }
 
-    public List<Path> GetAllPaths(Car startCar, Car endCar)
+    public List<Path> GetAllPaths(float x1, float y1, float theta1, float x2, float y2, float theta2)
     {
-        List<Func<float, float, float, Path>> pathFuncs = new List<Func<float, float, float, Path>> 
-        { Path1, Path2, Path3, Path4, Path5, Path6, Path7, Path8, Path9, Path10, Path11, Path12 };
+        var pathFuncs = new List<Func<float, float, float, Path>>
+            { Path1, Path2, Path3, Path4, Path5, Path6, Path7, Path8, Path9, Path10, Path11, Path12 };
 
-        List<Path> paths = new List<Path>();
+        var paths = new List<Path>();
 
-        // 90 graus menos o angulo de heading
-        (float x, float y, float theta) = ChangeOfBasis(
-            startCar.rearWheelPosition.x,
-            startCar.rearWheelPosition.z,
-            90f - startCar.headingAngle,
-            endCar.rearWheelPosition.x,
-            endCar.rearWheelPosition.z,
-            90f - endCar.headingAngle,
-            5.9f
+        var (x, y, theta) = ChangeOfBasis(
+            x1,
+            y1,
+            90f - theta1,
+            x2,
+            y2,
+            90f - theta2,
+            Constants.CarTurningRadius
         );
 
         foreach (var getPath in pathFuncs)
         {
             paths.Add(getPath(x, y, theta));
-            paths.Add(Timeflip(getPath(-x, y, -theta)));
+            paths.Add(TimeFlip(getPath(-x, y, -theta)));
             paths.Add(Reflect(getPath(x, -y, -theta)));
-            paths.Add(Reflect(Timeflip(getPath(-x, -y, theta))));
+            paths.Add(Reflect(TimeFlip(getPath(-x, -y, theta))));
         }
 
-        for (int i = 0; i < paths.Count; i++)
+        for (var i = 0; i < paths.Count; i++)
         {
-            paths[i] = paths[i].FindAll(e => e.distance != 0);
+            paths[i] = paths[i].FindAll(movement => movement.Distance != 0);
+
+            paths[i].ForEach(movement => movement.Distance *= Constants.CarTurningRadius);
         }
 
-        paths.RemoveAll(p => p.Count == 0);
+        paths.RemoveAll(path => path.Count == 0);
 
         return paths;
-
     }
 
-    private Path Timeflip(Path path)
+    private static Path TimeFlip(Path path)
     {
-        foreach (var segment in path) 
+        foreach (var movement in path)
         {
-            segment.ReverseGear();
+            movement.ReverseGear();
         }
 
         return path;
     }
 
-    private Path Reflect(Path path)
+    private static Path Reflect(Path path)
     {
-        foreach (var segment in path)
+        foreach (var movement in path)
         {
-            segment.ReverseSteering();
+            movement.ReverseSteering();
         }
 
         return path;
     }
 
-    private (float x, float y, float theta) ChangeOfBasis(float x1, float y1, float theta1, float x2, float y2, float theta2, float turningRadius = 1f)
+    private static (float x, float y, float theta) ChangeOfBasis(float x1, float y1, float theta1, float x2, float y2,
+        float theta2, float turningRadius = 1f)
     {
-        float dx = (x2 - x1) / turningRadius; 
-        float dy = (y2 - y1) / turningRadius;
+        var dx = (x2 - x1) / turningRadius;
+        var dy = (y2 - y1) / turningRadius;
 
-        float theta = theta2 - theta1;
+        var theta = theta2 - theta1;
 
         theta1 *= Mathf.Deg2Rad;
 
-        float x = dx * Mathf.Cos(theta1) + dy * Mathf.Sin(theta1);
-        float y = -dx * Mathf.Sin(theta1) + dy * Mathf.Cos(theta1);
-
+        var x = dx * Mathf.Cos(theta1) + dy * Mathf.Sin(theta1);
+        var y = -dx * Mathf.Sin(theta1) + dy * Mathf.Cos(theta1);
 
         return (x, y, theta);
     }
@@ -141,14 +97,14 @@ public class ReedsShepp : MonoBehaviour
     {
         phi *= Mathf.Deg2Rad;
 
-        (float u, float t) = R(x - Mathf.Sin(phi), y - 1 + Mathf.Cos(phi));
-        float v = M(phi - t);
+        var (u, t) = R(x - Mathf.Sin(phi), y - 1f + Mathf.Cos(phi));
+        var v = M(phi - t);
 
-        Path path = new Path 
+        var path = new Path
         {
-            new PathSegment(t, PathSegment.Steering.Left, PathSegment.Gear.Forward),
-            new PathSegment(u, PathSegment.Steering.Straight, PathSegment.Gear.Forward),
-            new PathSegment(v, PathSegment.Steering.Left, PathSegment.Gear.Forward)
+            new(t, Movement.Steering.Left, Movement.Gear.Forward),
+            new(u, Movement.Steering.Straight, Movement.Gear.Forward),
+            new(v, Movement.Steering.Left, Movement.Gear.Forward)
         };
 
         return path;
@@ -158,23 +114,21 @@ public class ReedsShepp : MonoBehaviour
     {
         phi = M(phi * Mathf.Deg2Rad);
 
-        (float rho, float t1) = R(x + Mathf.Sin(phi), y - 1 - Mathf.Cos(phi));
+        var (rho, t1) = R(x + Mathf.Sin(phi), y - 1f - Mathf.Cos(phi));
 
-        float t, u, v;
+        Path path = new();
 
-        Path path = new Path();
-
-        if (rho * rho >= 4)
+        if (rho * rho >= 4f)
         {
-            u = Mathf.Sqrt(rho * rho - 4);
-            t = M(t1 + Mathf.Atan2(2, u));
-            v = M(t - phi);
+            var u = Mathf.Sqrt(rho * rho - 4f);
+            var t = M(t1 + Mathf.Atan2(2f, u));
+            var v = M(t - phi);
 
             path = new Path
             {
-                new PathSegment(t, PathSegment.Steering.Left, PathSegment.Gear.Forward),
-                new PathSegment(u, PathSegment.Steering.Straight, PathSegment.Gear.Forward),
-                new PathSegment(v, PathSegment.Steering.Right, PathSegment.Gear.Forward)
+                new(t, Movement.Steering.Left, Movement.Gear.Forward),
+                new(u, Movement.Steering.Straight, Movement.Gear.Forward),
+                new(v, Movement.Steering.Right, Movement.Gear.Forward)
             };
         }
 
@@ -185,27 +139,25 @@ public class ReedsShepp : MonoBehaviour
     {
         phi *= Mathf.Deg2Rad;
 
-        float xi = x - Mathf.Sin(phi);
-        float eta = y - 1 + Mathf.Cos(phi);
+        var xi = x - Mathf.Sin(phi);
+        var eta = y - 1f + Mathf.Cos(phi);
 
-        (float rho, float theta) = R(xi, eta);
+        var (rho, theta) = R(xi, eta);
 
-        float t, u, v, A;
+        Path path = new();
 
-        Path path = new Path();
-
-        if (rho <= 4)
+        if (rho <= 4f)
         {
-            A = Mathf.Acos(rho / 4f);
-            t = M(theta + Mathf.PI / 2f + A);
-            u = M(Mathf.PI - 2f * A);
-            v = M(phi - t - u);
+            var A = Mathf.Acos(rho / 4f);
+            var t = M(theta + Mathf.PI / 2f + A);
+            var u = M(Mathf.PI - 2f * A);
+            var v = M(phi - t - u);
 
             path = new Path
             {
-                new PathSegment(t, PathSegment.Steering.Left, PathSegment.Gear.Forward),
-                new PathSegment(u, PathSegment.Steering.Right, PathSegment.Gear.Backward),
-                new PathSegment(v, PathSegment.Steering.Left, PathSegment.Gear.Forward)
+                new(t, Movement.Steering.Left, Movement.Gear.Forward),
+                new(u, Movement.Steering.Right, Movement.Gear.Backward),
+                new(v, Movement.Steering.Left, Movement.Gear.Forward)
             };
         }
 
@@ -216,59 +168,54 @@ public class ReedsShepp : MonoBehaviour
     {
         phi *= Mathf.Deg2Rad;
 
-        float xi = x - Mathf.Sin(phi);
-        float eta = y - 1 + Mathf.Cos(phi);
+        var xi = x - Mathf.Sin(phi);
+        var eta = y - 1f + Mathf.Cos(phi);
 
-        (float rho, float theta) = R(xi, eta);
+        var (rho, theta) = R(xi, eta);
 
-        float t, u, v, A;
+        Path path = new();
 
-        Path path = new Path();
-
-        if (rho <= 4)
+        if (rho <= 4f)
         {
-            A = Mathf.Acos(rho / 4f);
-            t = M(theta + Mathf.PI / 2f + A);
-            u = M(Mathf.PI - 2f * A);
-            v = M(t + u - phi);
+            var A = Mathf.Acos(rho / 4f);
+            var t = M(theta + Mathf.PI / 2f + A);
+            var u = M(Mathf.PI - 2f * A);
+            var v = M(t + u - phi);
 
             path = new Path
             {
-                new PathSegment(t, PathSegment.Steering.Left, PathSegment.Gear.Forward),
-                new PathSegment(u, PathSegment.Steering.Right, PathSegment.Gear.Backward),
-                new PathSegment(v, PathSegment.Steering.Left, PathSegment.Gear.Backward)
+                new(t, Movement.Steering.Left, Movement.Gear.Forward),
+                new(u, Movement.Steering.Right, Movement.Gear.Backward),
+                new(v, Movement.Steering.Left, Movement.Gear.Backward)
             };
         }
 
         return path;
-
     }
 
     private Path Path5(float x, float y, float phi)
     {
         phi *= Mathf.Deg2Rad;
 
-        float xi = x - Mathf.Sin(phi);
-        float eta = y - 1 + Mathf.Cos(phi);
+        var xi = x - Mathf.Sin(phi);
+        var eta = y - 1f + Mathf.Cos(phi);
 
-        (float rho, float theta) = R(xi, eta);
+        var (rho, theta) = R(xi, eta);
 
-        float t, u, v, A;
+        Path path = new();
 
-        Path path = new Path();
-
-        if (rho <= 4)
+        if (rho <= 4f)
         {
-            u = Mathf.Acos(1 - rho * rho / 8f);
-            A = Mathf.Asin(2 * Mathf.Sin(u) / rho);
-            t = M(theta + Mathf.PI / 2f - A);
-            v = M(t - u - phi);
+            var u = Mathf.Acos(1f - rho * rho / 8f);
+            var A = Mathf.Asin(2f * Mathf.Sin(u) / rho);
+            var t = M(theta + Mathf.PI / 2f - A);
+            var v = M(t - u - phi);
 
             path = new Path
             {
-                new PathSegment(t, PathSegment.Steering.Left, PathSegment.Gear.Forward),
-                new PathSegment(u, PathSegment.Steering.Right, PathSegment.Gear.Forward),
-                new PathSegment(v, PathSegment.Steering.Left, PathSegment.Gear.Backward)
+                new(t, Movement.Steering.Left, Movement.Gear.Forward),
+                new(u, Movement.Steering.Right, Movement.Gear.Forward),
+                new(v, Movement.Steering.Left, Movement.Gear.Backward)
             };
         }
 
@@ -279,14 +226,14 @@ public class ReedsShepp : MonoBehaviour
     {
         phi *= Mathf.Deg2Rad;
 
-        float xi = x + Mathf.Sin(phi);
-        float eta = y - 1 - Mathf.Cos(phi);
+        var xi = x + Mathf.Sin(phi);
+        var eta = y - 1f - Mathf.Cos(phi);
 
-        (float rho, float theta) = R(xi, eta);
+        var (rho, theta) = R(xi, eta);
 
         float t, u, v, A;
 
-        Path path = new Path();
+        Path path = new();
 
         if (rho <= 4f)
         {
@@ -296,8 +243,8 @@ public class ReedsShepp : MonoBehaviour
                 t = M(theta + Mathf.PI / 2f + A);
                 u = M(A);
                 v = M(phi - t + 2f * u);
-                
-            } else
+            }
+            else
             {
                 A = Mathf.Acos((rho - 2f) / 4f);
                 t = M(theta + Mathf.PI / 2f - A);
@@ -307,10 +254,10 @@ public class ReedsShepp : MonoBehaviour
 
             path = new Path
             {
-                new PathSegment(t, PathSegment.Steering.Left, PathSegment.Gear.Forward),
-                new PathSegment(u, PathSegment.Steering.Right, PathSegment.Gear.Forward),
-                new PathSegment(u, PathSegment.Steering.Left, PathSegment.Gear.Backward),
-                new PathSegment(v, PathSegment.Steering.Right, PathSegment.Gear.Backward)
+                new(t, Movement.Steering.Left, Movement.Gear.Forward),
+                new(u, Movement.Steering.Right, Movement.Gear.Forward),
+                new(u, Movement.Steering.Left, Movement.Gear.Backward),
+                new(v, Movement.Steering.Right, Movement.Gear.Backward)
             };
         }
 
@@ -321,29 +268,27 @@ public class ReedsShepp : MonoBehaviour
     {
         phi *= Mathf.Deg2Rad;
 
-        float xi = x + Mathf.Sin(phi);
-        float eta = y - 1 - Mathf.Cos(phi);
+        var xi = x + Mathf.Sin(phi);
+        var eta = y - 1f - Mathf.Cos(phi);
 
-        (float rho, float theta) = R(xi, eta);
-        float u1 = (20f - rho * rho) / 16f;
+        var (rho, theta) = R(xi, eta);
+        var u1 = (20f - rho * rho) / 16f;
 
-        float t, u, v, A;
+        Path path = new();
 
-        Path path = new Path();
-
-        if (rho <= 6 && (u1 >= 0 && u1 <= 1f))
+        if (rho <= 6f && u1 >= 0 && u1 <= 1f)
         {
-            u = Mathf.Acos(u1);
-            A = Mathf.Asin(2f * Mathf.Sin(u) / rho);
-            t = M(theta + Mathf.PI / 2f + A);
-            v = M(t - phi);
+            var u = Mathf.Acos(u1);
+            var A = Mathf.Asin(2f * Mathf.Sin(u) / rho);
+            var t = M(theta + Mathf.PI / 2f + A);
+            var v = M(t - phi);
 
             path = new Path
             {
-                new PathSegment(t, PathSegment.Steering.Left, PathSegment.Gear.Forward),
-                new PathSegment(u, PathSegment.Steering.Right, PathSegment.Gear.Backward),
-                new PathSegment(u, PathSegment.Steering.Left, PathSegment.Gear.Backward),
-                new PathSegment(v, PathSegment.Steering.Right, PathSegment.Gear.Forward)
+                new(t, Movement.Steering.Left, Movement.Gear.Forward),
+                new(u, Movement.Steering.Right, Movement.Gear.Backward),
+                new(u, Movement.Steering.Left, Movement.Gear.Backward),
+                new(v, Movement.Steering.Right, Movement.Gear.Forward)
             };
         }
 
@@ -354,28 +299,26 @@ public class ReedsShepp : MonoBehaviour
     {
         phi *= Mathf.Deg2Rad;
 
-        float xi = x - Mathf.Sin(phi);
-        float eta = y - 1 + Mathf.Cos(phi);
+        var xi = x - Mathf.Sin(phi);
+        var eta = y - 1f + Mathf.Cos(phi);
 
-        (float rho, float theta) = R(xi, eta);
+        var (rho, theta) = R(xi, eta);
 
-        float t, u, v, A;
+        Path path = new();
 
-        Path path = new Path();
-
-        if (rho >= 2)
+        if (rho >= 2f)
         {
-            u = Mathf.Sqrt(rho * rho - 4f) - 2f;
-            A = Mathf.Atan2(2, u + 2);
-            t = M(theta + Mathf.PI / 2f + A);
-            v = M(t - phi + Mathf.PI / 2f);
+            var u = Mathf.Sqrt(rho * rho - 4f) - 2f;
+            var A = Mathf.Atan2(2f, u + 2f);
+            var t = M(theta + Mathf.PI / 2f + A);
+            var v = M(t - phi + Mathf.PI / 2f);
 
             path = new Path
             {
-                new PathSegment(t, PathSegment.Steering.Left, PathSegment.Gear.Forward),
-                new PathSegment(Mathf.PI / 2f, PathSegment.Steering.Right, PathSegment.Gear.Backward),
-                new PathSegment(u, PathSegment.Steering.Straight, PathSegment.Gear.Backward),
-                new PathSegment(v, PathSegment.Steering.Left, PathSegment.Gear.Backward)
+                new(t, Movement.Steering.Left, Movement.Gear.Forward),
+                new(Mathf.PI / 2f, Movement.Steering.Right, Movement.Gear.Backward),
+                new(u, Movement.Steering.Straight, Movement.Gear.Backward),
+                new(v, Movement.Steering.Left, Movement.Gear.Backward)
             };
         }
 
@@ -386,28 +329,26 @@ public class ReedsShepp : MonoBehaviour
     {
         phi *= Mathf.Deg2Rad;
 
-        float xi = x - Mathf.Sin(phi);
-        float eta = y - 1 + Mathf.Cos(phi);
+        var xi = x - Mathf.Sin(phi);
+        var eta = y - 1f + Mathf.Cos(phi);
 
-        (float rho, float theta) = R(xi, eta);
+        var (rho, theta) = R(xi, eta);
 
-        float t, u, v, A;
+        Path path = new();
 
-        Path path = new Path();
-
-        if (rho >= 2)
+        if (rho >= 2f)
         {
-            u = Mathf.Sqrt(rho * rho - 4f) - 2f;
-            A = Mathf.Atan2(u + 2f, 2f);
-            t = M(theta + Mathf.PI / 2f - A);
-            v = M(t - phi - Mathf.PI / 2f);
+            var u = Mathf.Sqrt(rho * rho - 4f) - 2f;
+            var A = Mathf.Atan2(u + 2f, 2f);
+            var t = M(theta + Mathf.PI / 2f - A);
+            var v = M(t - phi - Mathf.PI / 2f);
 
             path = new Path
             {
-                new PathSegment(t, PathSegment.Steering.Left, PathSegment.Gear.Forward),
-                new PathSegment(u, PathSegment.Steering.Straight, PathSegment.Gear.Forward),
-                new PathSegment(Mathf.PI / 2f, PathSegment.Steering.Right, PathSegment.Gear.Forward),
-                new PathSegment(v, PathSegment.Steering.Left, PathSegment.Gear.Backward)
+                new(t, Movement.Steering.Left, Movement.Gear.Forward),
+                new(u, Movement.Steering.Straight, Movement.Gear.Forward),
+                new(Mathf.PI / 2f, Movement.Steering.Right, Movement.Gear.Forward),
+                new(v, Movement.Steering.Left, Movement.Gear.Backward)
             };
         }
 
@@ -418,27 +359,25 @@ public class ReedsShepp : MonoBehaviour
     {
         phi *= Mathf.Deg2Rad;
 
-        float xi = x + Mathf.Sin(phi);
-        float eta = y - 1 - Mathf.Cos(phi);
+        var xi = x + Mathf.Sin(phi);
+        var eta = y - 1f - Mathf.Cos(phi);
 
-        (float rho, float theta) = R(xi, eta);
+        var (rho, theta) = R(xi, eta);
 
-        float t, u, v;
+        Path path = new();
 
-        Path path = new Path();
-
-        if (rho >= 2)
+        if (rho >= 2f)
         {
-            t = M(theta + Mathf.PI / 2f);
-            u = rho - 2;
-            v = M(phi - t - Mathf.PI / 2f);
+            var t = M(theta + Mathf.PI / 2f);
+            var u = rho - 2f;
+            var v = M(phi - t - Mathf.PI / 2f);
 
             path = new Path
             {
-                new PathSegment(t, PathSegment.Steering.Left, PathSegment.Gear.Forward),
-                new PathSegment(Mathf.PI / 2f, PathSegment.Steering.Right, PathSegment.Gear.Backward),
-                new PathSegment(u, PathSegment.Steering.Straight, PathSegment.Gear.Backward),
-                new PathSegment(v, PathSegment.Steering.Right, PathSegment.Gear.Backward)
+                new(t, Movement.Steering.Left, Movement.Gear.Forward),
+                new(Mathf.PI / 2f, Movement.Steering.Right, Movement.Gear.Backward),
+                new(u, Movement.Steering.Straight, Movement.Gear.Backward),
+                new(v, Movement.Steering.Right, Movement.Gear.Backward)
             };
         }
 
@@ -449,27 +388,25 @@ public class ReedsShepp : MonoBehaviour
     {
         phi *= Mathf.Deg2Rad;
 
-        float xi = x + Mathf.Sin(phi);
-        float eta = y - 1 - Mathf.Cos(phi);
+        var xi = x + Mathf.Sin(phi);
+        var eta = y - 1f - Mathf.Cos(phi);
 
-        (float rho, float theta) = R(xi, eta);
+        var (rho, theta) = R(xi, eta);
 
-        float t, u, v;
+        Path path = new();
 
-        Path path = new Path();
-
-        if (rho >= 2)
+        if (rho >= 2f)
         {
-            t = M(theta);
-            u = rho - 2;
-            v = M(phi - t - Mathf.PI / 2f);
+            var t = M(theta);
+            var u = rho - 2f;
+            var v = M(phi - t - Mathf.PI / 2f);
 
             path = new Path
             {
-                new PathSegment(t, PathSegment.Steering.Left, PathSegment.Gear.Forward),
-                new PathSegment(u, PathSegment.Steering.Straight, PathSegment.Gear.Forward),
-                new PathSegment(Mathf.PI / 2f, PathSegment.Steering.Left, PathSegment.Gear.Forward),
-                new PathSegment(v, PathSegment.Steering.Right, PathSegment.Gear.Backward)
+                new(t, Movement.Steering.Left, Movement.Gear.Forward),
+                new(u, Movement.Steering.Straight, Movement.Gear.Forward),
+                new(Mathf.PI / 2f, Movement.Steering.Left, Movement.Gear.Forward),
+                new(v, Movement.Steering.Right, Movement.Gear.Backward)
             };
         }
 
@@ -480,29 +417,27 @@ public class ReedsShepp : MonoBehaviour
     {
         phi *= Mathf.Deg2Rad;
 
-        float xi = x + Mathf.Sin(phi);
-        float eta = y - 1 - Mathf.Cos(phi);
+        var xi = x + Mathf.Sin(phi);
+        var eta = y - 1f - Mathf.Cos(phi);
 
-        (float rho, float theta) = R(xi, eta);
+        var (rho, theta) = R(xi, eta);
 
-        float t, u, v, A;
+        Path path = new();
 
-        Path path = new Path();
-
-        if (rho >= 4)
+        if (rho >= 4f)
         {
-            u = Mathf.Sqrt(rho * rho - 4f) - 4f;
-            A = Mathf.Atan2(2f, u + 4f);
-            t = M(theta + Mathf.PI / 2f + A);
-            v = M(t - phi);
+            var u = Mathf.Sqrt(rho * rho - 4f) - 4f;
+            var A = Mathf.Atan2(2f, u + 4f);
+            var t = M(theta + Mathf.PI / 2f + A);
+            var v = M(t - phi);
 
             path = new Path
             {
-                new PathSegment(t, PathSegment.Steering.Left, PathSegment.Gear.Forward),
-                new PathSegment(Mathf.PI / 2f, PathSegment.Steering.Right, PathSegment.Gear.Backward),
-                new PathSegment(u, PathSegment.Steering.Straight, PathSegment.Gear.Backward),
-                new PathSegment(Mathf.PI / 2f, PathSegment.Steering.Left, PathSegment.Gear.Backward),
-                new PathSegment(v, PathSegment.Steering.Right, PathSegment.Gear.Forward)
+                new(t, Movement.Steering.Left, Movement.Gear.Forward),
+                new(Mathf.PI / 2f, Movement.Steering.Right, Movement.Gear.Backward),
+                new(u, Movement.Steering.Straight, Movement.Gear.Backward),
+                new(Mathf.PI / 2f, Movement.Steering.Left, Movement.Gear.Backward),
+                new(v, Movement.Steering.Right, Movement.Gear.Forward)
             };
         }
 
@@ -515,9 +450,9 @@ public class ReedsShepp : MonoBehaviour
     /// </summary>
     /// <param name="theta">The input angle in radians.</param>
     /// <returns>The adjusted angle phi in radians.</returns>
-    private float M(float theta)
+    private static float M(float theta)
     {
-        float phi = theta % (2f * Mathf.PI);
+        var phi = theta % (2f * Mathf.PI);
         if (phi < -Mathf.PI) return phi + 2f * Mathf.PI;
         if (phi >= Mathf.PI) return phi - 2f * Mathf.PI;
         return theta;
@@ -526,10 +461,10 @@ public class ReedsShepp : MonoBehaviour
     /// <summary>
     /// Return the polar coordinates (r, theta) of the point (x, y).
     /// </summary>
-    private (float, float) R(float x, float y)
+    private static (float, float) R(float x, float y)
     {
-        float r = Mathf.Sqrt(x * x + y * y);
-        float theta = Mathf.Atan2(y, x);
+        var r = Mathf.Sqrt(x * x + y * y);
+        var theta = Mathf.Atan2(y, x);
         return (r, theta);
     }
 }

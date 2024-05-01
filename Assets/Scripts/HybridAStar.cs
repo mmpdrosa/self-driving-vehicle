@@ -1,299 +1,286 @@
-using System.Collections;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
-using static PathSegment;
+using Path = System.Collections.Generic.List<Movement>;
 
-public class HybridAStar : MonoBehaviour
+public class HybridAStar
 {
-    private static float driveDistance = Mathf.Sqrt(Mathf.Pow(0.5f, 2) * 2f) + 0.01f;
+    private readonly AStartGrid _grid;
 
-    private float positionAccuracy = 0.5f; // meters
-    private float angleAccuracy = 5f; // degrees
+    private readonly Car _startCar, _goalCar;
 
-    private float headingAngleResolution = 15f; // degrees
+    private readonly List<Node> _expandedNodes = new();
 
-    private List<Node> finalPath;
+    private readonly List<Node> _finalNodes = new();
 
-    List<Node> expandedNodes;
-
-    private AStartGrid grid;
-
-    private void OnDrawGizmos()
+    public HybridAStar(AStartGrid grid, Car startCar, Car goalCar)
     {
-        //DisplaySearchTree();
-
-        Gizmos.color = Color.red;
-
-        if (finalPath != null)
-        {
-            for (int i = 0; i < finalPath.Count; i++)
-            {
-                Node currentNode = finalPath[i];
-
-                if (currentNode.parent == null)
-                {
-                    continue;
-                }
-
-                Gizmos.DrawLine(currentNode.rearWheelPosition, currentNode.parent.rearWheelPosition);
-            }
-        }
+        _grid = grid;
+        _startCar = startCar;
+        _goalCar = goalCar;
     }
 
-    public void FindPath(AStartGrid _grid, Car startCar, Car endCar)
+    public Path FindPath(bool analyticalExpansion = true)
     {
-        grid = _grid;
-
-        Heap<Node> openSet = new Heap<Node>(100000);
-        HashSet<int>[,] analyzedCellHeadingAnglesGrid = new HashSet<int>[grid.width, grid.height];
-        Dictionary<int, Node>[,] lowestCostNodeByAngleGrid = new Dictionary<int, Node>[grid.width, grid.height];
-
-        expandedNodes = new List<Node>();
-
-        for (int i = 0; i < grid.width;  i++)
+        if (!_grid.IsPositionWalkable(_startCar.RearWheelPosition) ||
+            !_grid.IsPositionWalkable(_goalCar.RearWheelPosition))
         {
-            for (int j = 0; j < grid.height; j++)
+            return null;
+        }
+
+        Heap<Node> openSet = new(Constants.Iterations * 6);
+
+        var lowestCostSetList = new Dictionary<int, Node>[_grid.Width, _grid.Height];
+
+        for (var i = 0; i < _grid.Width; i++)
+        {
+            for (var j = 0; j < _grid.Height; j++)
             {
-                analyzedCellHeadingAnglesGrid[i, j] = new HashSet<int>();
-                lowestCostNodeByAngleGrid[i, j] = new Dictionary<int, Node>();
+                lowestCostSetList[i, j] = new Dictionary<int, Node>();
             }
         }
 
-        AStarCell startCell = grid.GetCellFromWorldPosition(startCar.rearWheelPosition);
+        Movement startMovement = new(0, Movement.Steering.Straight, Movement.Gear.Forward);
 
-        if (startCell == null)
-        {
-            return;
-        }
-
-        Node startNode = new Node(
-            parent: null,
-            rearWheelPosition: startCar.rearWheelPosition,
-            headingAngle: startCar.headingAngle,
-            isReversing: false
-        );
-
-        startNode.AddCosts(
-            gCost: 0f,
-            hCost: startCell.fCost
-        );
+        Node startNode = new(_startCar.RearWheelPosition, _startCar.HeadingAngle, startMovement, null);
 
         openSet.Add(startNode);
 
-        AStarCell goalCell = grid.GetCellFromWorldPosition(endCar.rearWheelPosition);
-
-        if (goalCell == null)
-        {
-            return;
-        }
+        Path reedsSheppPath = null;
 
         Node finalNode = null;
 
-        int flag = 0;
+        var iterations = 0;
 
-        while(flag < 100000)
+        while (iterations < Constants.Iterations)
         {
-            flag++;
+            iterations++;
 
-            Node currentNode = openSet.RemoveFirst();
+            var currentNode = openSet.RemoveFirst();
 
-            AStarCell currentCell = grid.GetCellFromWorldPosition(currentNode.rearWheelPosition);
-
-            if (currentCell == null)
+            if (analyticalExpansion && TryAnalyticalExpansion(currentNode.RearWheelPosition, currentNode.HeadingAngle,
+                    out reedsSheppPath))
             {
-                continue;
+                finalNode = currentNode;
+                break;
             }
 
-            int roundedHeadingAngle = RoundValueByStep(currentNode.headingAgle, headingAngleResolution);
+            var distance = (currentNode.RearWheelPosition - _goalCar.RearWheelPosition).sqrMagnitude;
 
-            HashSet<int> analyzedCellHeadingAngles = analyzedCellHeadingAnglesGrid[currentCell.gridPosition.x, currentCell.gridPosition.y];
+            var goalPositionReached = distance < Constants.GoalDistanceThreshold;
 
-            if (!analyzedCellHeadingAngles.Contains(roundedHeadingAngle))
-            {
-                analyzedCellHeadingAngles.Add(roundedHeadingAngle);
-            } else
-            {
-                continue;
-            }
+            var goalAngleReached = Math.Abs(currentNode.HeadingAngle - _goalCar.HeadingAngle) <
+                                   Constants.GoalHeadingAngleThreshold;
 
-            expandedNodes.Add(currentNode);
+            var goalReached = goalPositionReached && goalAngleReached;
 
-            // yield return new WaitForSeconds(0.001f);
-
-            float distanceToGoal = (currentNode.rearWheelPosition - endCar.rearWheelPosition).sqrMagnitude;
-
-            float headingAngleDifference = Mathf.Abs(endCar.headingAngle - currentNode.headingAgle);
-
-            if ((distanceToGoal < Mathf.Pow(positionAccuracy, 2) || currentCell == goalCell) && headingAngleDifference < angleAccuracy)
+            if (goalReached)
             {
                 finalNode = currentNode;
 
                 break;
             }
 
-            List<Node> children = GetNodeChildren(currentNode);
+            var children = GetNodeChildren(currentNode);
 
-            foreach ( Node child in children )
+            _expandedNodes.Add(currentNode);
+
+            foreach (var child in children)
             {
-                AStarCell childCell = grid.GetCellFromWorldPosition(child.rearWheelPosition);
+                var childCell = _grid.GetCell(child.RearWheelPosition);
 
-                if (childCell == null)
+                child.hCost = childCell.EuclideanDistance + childCell.HolonomicHeuristic;
+
+                var roundedChildHeadingAngle =
+                    Utils.RoundValueToNearestStep(child.HeadingAngle, Constants.HeadingAngleStep);
+
+                var lowestCostSet = lowestCostSetList[childCell.GridPosition.x, childCell.GridPosition.y];
+
+                if (lowestCostSet.TryGetValue(roundedChildHeadingAngle, out var lowestCostNode))
                 {
-                    continue;
-                }
-
-                int roundedChildHeadingAngle = RoundValueByStep(child.headingAgle, headingAngleResolution);
-
-                HashSet<int> analyzedChildCellHeadingAngles = analyzedCellHeadingAnglesGrid[childCell.gridPosition.x, childCell.gridPosition.y];
-
-                if (analyzedChildCellHeadingAngles.Contains(roundedChildHeadingAngle))
-                {
-                    continue;
-                }
-
-                float childCost = child.gCost;
-
-                Dictionary<int, Node> lowestCostNodeByAngle = lowestCostNodeByAngleGrid[childCell.gridPosition.x, childCell.gridPosition.y];
-
-                if (lowestCostNodeByAngle.ContainsKey(roundedChildHeadingAngle))
-                {
-                    Node currentLowestCostNode = lowestCostNodeByAngle[roundedChildHeadingAngle];
-
-                    // atualizar o nó de menor custo nesse ângulo 
-                    if (childCost < currentLowestCostNode.gCost)
+                    if (child.gCost > lowestCostNode.gCost)
                     {
-                        currentLowestCostNode.CopyData(child);
-
-                        openSet.UpdateItem(currentLowestCostNode);
+                        continue;
                     }
 
-                    continue;
-                } else
-                {
-                    lowestCostNodeByAngle[roundedChildHeadingAngle] = child;
+                    openSet.Remove(lowestCostNode);
+                    openSet.Add(child);
+                    lowestCostSet.Remove(roundedChildHeadingAngle);
+                    lowestCostSet.Add(roundedChildHeadingAngle, child);
                 }
-
-                openSet.Add(child);
+                else
+                {
+                    lowestCostSet.Add(roundedChildHeadingAngle, child);
+                    openSet.Add(child);
+                }
             }
         }
 
-        List<Node> path = RetracePath(finalNode);
-
-        finalPath = path;
-    }
-
-
-    public static int RoundValueByStep(float value, float step)
-    {
-        return (int)(Mathf.RoundToInt(value / step) * step);
-    }
-
-    
-
-    public List<Node> GetNodeChildren(Node node)
-    {
-        List<Node> children = new List<Node>();
-
-        foreach (Gear gear in System.Enum.GetValues(typeof(Gear)))
+        if (finalNode == null)
         {
-            foreach (Steering steering in System.Enum.GetValues(typeof(Steering)))
+            return null;
+        }
+
+        var path = RetracePath(finalNode);
+
+        Debug.Log("Hybrid A* path:");
+
+        foreach (var movement in path)
+        {
+            Debug.Log(movement);
+        }
+
+        if (reedsSheppPath != null)
+        {
+            path.AddRange(reedsSheppPath);
+
+            Debug.Log("Reeds-Shepp path:");
+
+            foreach (var movement in reedsSheppPath)
             {
-                PathSegment pathSegment = new PathSegment(driveDistance, steering, gear);
-
-                Vector3 childRearWheelPosition = Car.CalculatePositionAfterMovement(node.rearWheelPosition, node.headingAgle, pathSegment);
-
-                float childHeadingAngle = Car.CalculateHeadingAngleAfterMovement(node.headingAgle, pathSegment);
-
-                if (!grid.IsPositionWalkable(childRearWheelPosition))
-                {
-                    continue;
-                }
-
-                AStarCell childCell = grid.GetCellFromWorldPosition(childRearWheelPosition);
-
-                Node childNode = new Node(
-                    parent: node,
-                    rearWheelPosition: childRearWheelPosition,
-                    headingAngle: childHeadingAngle,
-                    isReversing: gear == Gear.Backward
-                );
-
-                float gCost = GetCostToReachNode(childNode);
-
-                // wheel cost
-                // gCost += steeringAngle != 0 ? 0.2f : 0;
-
-
-                float hCost = childCell.fCost;
-
-                childNode.AddCosts(gCost, hCost);
-
-                children.Add(childNode);
+                Debug.Log(movement);
             }
         }
-
-        return children;
-    }
-
-    private static float GetCostToReachNode(Node node)
-    {
-        Node parent = node.parent;
-
-        // Cost 0
-        float costSoFar = parent.gCost;
-
-        // Cost 1
-        float distanceCost = (node.rearWheelPosition - parent.rearWheelPosition).magnitude;
-
-        float reverseCost = node.isReversing ? 1.5f : 0f;
-
-        float switchMotionCost = 0f;
-
-        if ((node.isReversing && !parent.isReversing) || (!node.isReversing && parent.isReversing))
-        {
-            switchMotionCost = 0.5f;
-        }
-
-        return costSoFar + distanceCost + reverseCost + switchMotionCost;
-    }
-
-    private static List<Node> RetracePath(Node finalNode)
-    {
-        List<Node> path = new List<Node>();
-
-        Node currentNode = finalNode;
-
-        while (currentNode != null)
-        {
-            path.Add(currentNode);
-
-            currentNode = currentNode.parent;
-        }
-
-        path.Reverse();
 
         return path;
     }
 
-    public void DisplaySearchTree()
+    private List<Node> GetNodeChildren(Node node)
     {
-        if (expandedNodes == null)
+        return ((Movement.Gear[])Enum.GetValues(typeof(Movement.Gear)))
+            .SelectMany(gear => ((Movement.Steering[])Enum.GetValues(typeof(Movement.Steering)))
+                .Select(steering =>
+                {
+                    Movement movement = new(Constants.DriveDistance, steering, gear);
+
+                    var childRearWheelPosition =
+                        Car.CalculatePositionAfterMovement(node.RearWheelPosition, node.HeadingAngle, movement);
+
+                    if (!_grid.IsPositionWalkable(childRearWheelPosition))
+                    {
+                        return null;
+                    }
+
+                    var childHeadingAngle = Car.CalculateHeadingAfterMovement(node.HeadingAngle, movement);
+
+                    return new Node(childRearWheelPosition, childHeadingAngle, movement, node);
+                }))
+            .Where(child => child != null)
+            .ToList();
+    }
+
+    /*
+     * Currently, the function is not functioning as expected.
+     * The issue lies in the generation of the Reeds-Shepp path for certain cases.
+     * Initial investigations reveal that the start and goal positions are correctly defined.
+     * However, the generated path differs significantly from expected results.
+     * Notably, when utilizing the same start and goal positions with the ReedsShepp class directly,
+     * the correct path is generated.
+     * The discrepancy arises specifically when employing these positions within the context of the HybridAStar class,
+     * resulting in a divergent path output.
+     */
+    private bool TryAnalyticalExpansion(Vector3 position, float headingAngle, out Path reedsSheppPath)
+    {
+        ReedsShepp reedsShepp = new();
+
+        var path = reedsShepp.GetOptimalPath(position.x, position.z, headingAngle, _goalCar.RearWheelPosition.x,
+            _goalCar.RearWheelPosition.z, _goalCar.HeadingAngle);
+
+        var waypoints = PathBuilder.GenerateWaypoints(position, headingAngle, path, 36);
+
+        for (var i = 0; i < waypoints.Count - 1; i++)
+        {
+            var start = waypoints[i];
+            var end = waypoints[i + 1];
+
+            var waypoint = waypoints[i];
+
+            // this collision check still needs to be improved
+            if (!_grid.IsPositionWalkable(waypoint) || Physics.Linecast(start, end, _grid.UnwalkableMask))
+            {
+                reedsSheppPath = null;
+
+                return false;
+            }
+        }
+
+        // it was expected that this part would not be necessary
+        var lastWaypoint = waypoints.Last();
+
+        var lastWaypointCell = _grid.GetCell(lastWaypoint);
+        var goalCell = _grid.GetCell(_goalCar.RearWheelPosition);
+
+        if (lastWaypointCell != goalCell)
+        {
+            reedsSheppPath = null;
+
+            return false;
+        }
+
+        reedsSheppPath = path;
+        return true;
+    }
+
+    private Path RetracePath(Node node)
+    {
+        Path path = new();
+
+        var currentNode = node;
+
+        while (currentNode != null)
+        {
+            path.Add(currentNode.MovementInfo);
+
+            _finalNodes.Add(currentNode);
+
+            currentNode = currentNode.Parent;
+        }
+
+        path.Reverse();
+
+        _finalNodes.Reverse();
+
+        return path;
+    }
+
+    public void DrawExpandedNodes()
+    {
+        if (_expandedNodes == null)
         {
             return;
         }
 
-        for (int i = 0; i < expandedNodes.Count; i++)
+        foreach (var node in _expandedNodes)
         {
-            Node currentNode = expandedNodes[i];
-
-            if (currentNode.parent == null)
+            if (node.Parent == null)
             {
                 continue;
             }
 
-            Gizmos.color = currentNode.isReversing ? Color.cyan : Color.green;
+            Gizmos.color = node.MovementInfo.GearVal == Movement.Gear.Backward ? Color.cyan : Color.green;
 
-            Gizmos.DrawLine(currentNode.rearWheelPosition, currentNode.parent.rearWheelPosition);
+            Gizmos.DrawLine(node.RearWheelPosition, node.Parent.RearWheelPosition);
+        }
+    }
+
+    public void DrawFinalNodes()
+    {
+        if (_finalNodes == null)
+        {
+            return;
+        }
+
+        foreach (var node in _finalNodes)
+        {
+            if (node.Parent == null)
+            {
+                continue;
+            }
+
+            Gizmos.color = Color.red;
+
+            Gizmos.DrawLine(node.Parent.RearWheelPosition, node.RearWheelPosition);
         }
     }
 }

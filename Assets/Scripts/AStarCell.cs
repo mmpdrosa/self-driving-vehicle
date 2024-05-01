@@ -2,44 +2,31 @@ using UnityEngine;
 
 public class AStarCell : IHeapItem<AStarCell>
 {
-    public Vector3 position;
-    public bool walkable;
-    public float gCost;
-    public float hCost;
-    public int heapIndex;
-    public Vector2Int gridPosition;
-    public AStarCell parent;
+    public Vector2Int GridPosition { get; set; }
+    public Vector3 Position { get; set; }
+    public bool Walkable { get; set; }
+    public AStarCell Parent { get; set; }
 
-    public AStarCell(Vector3 _position, bool _walkable, Vector2Int _gridPosition)
-    {
-        position = _position;
-        gridPosition = _gridPosition;
-        walkable = _walkable;
-    }
+    public float EuclideanDistance { get; set; }
 
-    public float fCost
-    {
-        get
-        {
-            return gCost + hCost;
-        }
-    }
+    public float gCost { get; set; }
+    public float hCost { get; set; }
+    private float fCost => gCost + hCost;
 
-    public int HeapIndex
+    public float HolonomicHeuristic => fCost;
+
+    public int HeapIndex { get; set; }
+
+    public AStarCell(Vector2Int gridPosition, Vector3 position, bool walkable)
     {
-        get
-        {
-            return heapIndex;
-        }
-        set
-        {
-            heapIndex = value;
-        }
+        GridPosition = gridPosition;
+        Position = position;
+        Walkable = walkable;
     }
 
     public int CompareTo(AStarCell other)
     {
-        int compare = fCost.CompareTo(other.fCost);
+        var compare = fCost.CompareTo(other.fCost);
 
         if (compare == 0)
         {

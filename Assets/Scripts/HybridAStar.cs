@@ -6,44 +6,30 @@ using Path = System.Collections.Generic.List<Movement>;
 
 public class HybridAStar
 {
-    private readonly AStartGrid _grid;
-
-    private readonly Car _startCar, _goalCar;
-
-    private readonly List<Node> _expandedNodes = new();
-
-    private readonly List<Node> _finalNodes = new();
-
-    public HybridAStar(AStartGrid grid, Car startCar, Car goalCar)
+    public static Path FindPath(Grid<Cell> grid, Car startCar, Car goalCar, float[,] euclideanCosts,
+        float[,] holonomicCosts, float[,] flowFieldCosts, float[,] voronoiFieldCosts, out List<Node> finalNodes,
+        out List<Node> expandedNodes, bool analyticalExpansion = true)
     {
-        _grid = grid;
-        _startCar = startCar;
-        _goalCar = goalCar;
-    }
+        // TODO: Validate start and goal positions
 
-    public Path FindPath(bool analyticalExpansion = true)
-    {
-        if (!_grid.IsPositionWalkable(_startCar.RearWheelPosition) ||
-            !_grid.IsPositionWalkable(_goalCar.RearWheelPosition))
+        finalNodes = new List<Node>();
+        expandedNodes = new List<Node>();
+
+        var openSet = new Heap<Node>(Constants.Iterations * 6);
+
+        var lowestCostSetList = new Dictionary<int, Node>[grid.Width, grid.Height];
+
+        for (var i = 0; i < grid.Width; i++)
         {
-            return null;
-        }
-
-        Heap<Node> openSet = new(Constants.Iterations * 6);
-
-        var lowestCostSetList = new Dictionary<int, Node>[_grid.Width, _grid.Height];
-
-        for (var i = 0; i < _grid.Width; i++)
-        {
-            for (var j = 0; j < _grid.Height; j++)
+            for (var j = 0; j < grid.Height; j++)
             {
                 lowestCostSetList[i, j] = new Dictionary<int, Node>();
             }
         }
 
-        Movement startMovement = new(0, Movement.Steering.Straight, Movement.Gear.Forward);
+        var startMovement = new Movement(0, Movement.Steering.Straight, Movement.Gear.Forward);
 
-        Node startNode = new(_startCar.RearWheelPosition, _startCar.HeadingAngle, startMovement, null);
+        var startNode = new Node(startCar.RearWheelPosition, startCar.HeadingAngle, startMovement, parent: null);
 
         openSet.Add(startNode);
 
@@ -59,18 +45,20 @@ public class HybridAStar
 
             var currentNode = openSet.RemoveFirst();
 
-            if (analyticalExpansion && TryAnalyticalExpansion(currentNode.RearWheelPosition, currentNode.HeadingAngle,
+            // TODO: Run the analytical expansion only when the goal is close to the current node
+            if (analyticalExpansion && TryAnalyticalExpansion(grid, currentNode.RearWheelPosition,
+                    currentNode.HeadingAngle, goalCar.RearWheelPosition, goalCar.HeadingAngle,
                     out reedsSheppPath))
             {
                 finalNode = currentNode;
                 break;
             }
 
-            var distance = (currentNode.RearWheelPosition - _goalCar.RearWheelPosition).sqrMagnitude;
+            var distance = (currentNode.RearWheelPosition - goalCar.RearWheelPosition).magnitude;
 
             var goalPositionReached = distance < Constants.GoalDistanceThreshold;
 
-            var goalAngleReached = Math.Abs(currentNode.HeadingAngle - _goalCar.HeadingAngle) <
+            var goalAngleReached = Math.Abs(currentNode.HeadingAngle - goalCar.HeadingAngle) <
                                    Constants.GoalHeadingAngleThreshold;
 
             var goalReached = goalPositionReached && goalAngleReached;
@@ -82,15 +70,22 @@ public class HybridAStar
                 break;
             }
 
-            var children = GetNodeChildren(currentNode);
+            var children = GetNodeChildren(grid, currentNode);
 
-            _expandedNodes.Add(currentNode);
+            expandedNodes.Add(currentNode);
 
             foreach (var child in children)
             {
-                var childCell = _grid.GetCell(child.RearWheelPosition);
+                if (!grid.TryGetCellFromWorldPosition(child.RearWheelPosition, out var childCell)) continue;
 
-                child.hCost = childCell.EuclideanDistance + childCell.HolonomicHeuristic;
+                //child.hCost = childCell.EuclideanDistance + childCell.HolonomicHeuristic;
+
+                var x = childCell.GridPosition.x;
+                var y = childCell.GridPosition.y;
+
+                // TODO: Make the weights configurable to allow for better tuning
+                child.hCost = euclideanCosts[x, y] + holonomicCosts[x, y] + 1.5f * flowFieldCosts[x, y] +
+                              15f * (1f + voronoiFieldCosts[x, y]);
 
                 var roundedChildHeadingAngle =
                     Utils.RoundValueToNearestStep(child.HeadingAngle, Constants.HeadingAngleStep);
@@ -99,10 +94,7 @@ public class HybridAStar
 
                 if (lowestCostSet.TryGetValue(roundedChildHeadingAngle, out var lowestCostNode))
                 {
-                    if (child.gCost > lowestCostNode.gCost)
-                    {
-                        continue;
-                    }
+                    if (child.gCost > lowestCostNode.gCost) continue;
 
                     openSet.Remove(lowestCostNode);
                     openSet.Add(child);
@@ -117,12 +109,9 @@ public class HybridAStar
             }
         }
 
-        if (finalNode == null)
-        {
-            return null;
-        }
+        if (finalNode == null) return null;
 
-        var path = RetracePath(finalNode);
+        var path = RetracePath(finalNode, finalNodes);
 
         Debug.Log("Hybrid A* path:");
 
@@ -146,18 +135,18 @@ public class HybridAStar
         return path;
     }
 
-    private List<Node> GetNodeChildren(Node node)
+    private static List<Node> GetNodeChildren(Grid<Cell> grid, Node node)
     {
         return ((Movement.Gear[])Enum.GetValues(typeof(Movement.Gear)))
             .SelectMany(gear => ((Movement.Steering[])Enum.GetValues(typeof(Movement.Steering)))
                 .Select(steering =>
                 {
-                    Movement movement = new(Constants.DriveDistance, steering, gear);
+                    var movement = new Movement(Constants.DriveDistance, steering, gear);
 
                     var childRearWheelPosition =
                         Car.CalculatePositionAfterMovement(node.RearWheelPosition, node.HeadingAngle, movement);
 
-                    if (!_grid.IsPositionWalkable(childRearWheelPosition))
+                    if (!grid.IsPositionWalkable(childRearWheelPosition))
                     {
                         return null;
                     }
@@ -170,24 +159,13 @@ public class HybridAStar
             .ToList();
     }
 
-    /*
-     * Currently, the function is not functioning as expected.
-     * The issue lies in the generation of the Reeds-Shepp path for certain cases.
-     * Initial investigations reveal that the start and goal positions are correctly defined.
-     * However, the generated path differs significantly from expected results.
-     * Notably, when utilizing the same start and goal positions with the ReedsShepp class directly,
-     * the correct path is generated.
-     * The discrepancy arises specifically when employing these positions within the context of the HybridAStar class,
-     * resulting in a divergent path output.
-     */
-    private bool TryAnalyticalExpansion(Vector3 position, float headingAngle, out Path reedsSheppPath)
+    private static bool TryAnalyticalExpansion(Grid<Cell> grid, Vector3 currentPosition, float currentHeadingAngle,
+        Vector3 goalPosition, float goalHeadingAngle, out Path reedsSheppPath)
     {
-        ReedsShepp reedsShepp = new();
+        var path = ReedsShepp.GetOptimalPath(currentPosition.x, currentPosition.z, currentHeadingAngle, goalPosition.x,
+            goalPosition.z, goalHeadingAngle);
 
-        var path = reedsShepp.GetOptimalPath(position.x, position.z, headingAngle, _goalCar.RearWheelPosition.x,
-            _goalCar.RearWheelPosition.z, _goalCar.HeadingAngle);
-
-        var waypoints = PathBuilder.GenerateWaypoints(position, headingAngle, path, 36);
+        var waypoints = PathBuilder.GenerateWaypoints(currentPosition, currentHeadingAngle, path, 36);
 
         for (var i = 0; i < waypoints.Count - 1; i++)
         {
@@ -196,8 +174,8 @@ public class HybridAStar
 
             var waypoint = waypoints[i];
 
-            // this collision check still needs to be improved
-            if (!_grid.IsPositionWalkable(waypoint) || Physics.Linecast(start, end, _grid.UnwalkableMask))
+            // TODO: Implement a more accurate collision check
+            if (!grid.IsPositionWalkable(waypoint) || Physics.Linecast(start, end, grid.UnwalkableMask))
             {
                 reedsSheppPath = null;
 
@@ -205,24 +183,11 @@ public class HybridAStar
             }
         }
 
-        // it was expected that this part would not be necessary
-        var lastWaypoint = waypoints.Last();
-
-        var lastWaypointCell = _grid.GetCell(lastWaypoint);
-        var goalCell = _grid.GetCell(_goalCar.RearWheelPosition);
-
-        if (lastWaypointCell != goalCell)
-        {
-            reedsSheppPath = null;
-
-            return false;
-        }
-
         reedsSheppPath = path;
         return true;
     }
 
-    private Path RetracePath(Node node)
+    private static Path RetracePath(Node node, List<Node> finalNodes)
     {
         Path path = new();
 
@@ -232,55 +197,15 @@ public class HybridAStar
         {
             path.Add(currentNode.MovementInfo);
 
-            _finalNodes.Add(currentNode);
+            finalNodes.Add(currentNode);
 
             currentNode = currentNode.Parent;
         }
 
         path.Reverse();
 
-        _finalNodes.Reverse();
+        finalNodes.Reverse();
 
         return path;
-    }
-
-    public void DrawExpandedNodes()
-    {
-        if (_expandedNodes == null)
-        {
-            return;
-        }
-
-        foreach (var node in _expandedNodes)
-        {
-            if (node.Parent == null)
-            {
-                continue;
-            }
-
-            Gizmos.color = node.MovementInfo.GearVal == Movement.Gear.Backward ? Color.cyan : Color.green;
-
-            Gizmos.DrawLine(node.RearWheelPosition, node.Parent.RearWheelPosition);
-        }
-    }
-
-    public void DrawFinalNodes()
-    {
-        if (_finalNodes == null)
-        {
-            return;
-        }
-
-        foreach (var node in _finalNodes)
-        {
-            if (node.Parent == null)
-            {
-                continue;
-            }
-
-            Gizmos.color = Color.red;
-
-            Gizmos.DrawLine(node.Parent.RearWheelPosition, node.RearWheelPosition);
-        }
     }
 }

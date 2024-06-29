@@ -11,16 +11,12 @@ public class Car : MonoBehaviour
         HeadingAngle = headingAngle;
     }
 
-    public void Awake()
+    void OnDrawGizmos()
     {
         HeadingAngle = transform.eulerAngles.y;
         RearWheelPosition = transform.position + transform.rotation * new Vector3(0f, 0f, -1.43f);
-    }
 
-    public void Update()
-    {
-        HeadingAngle = transform.eulerAngles.y;
-        RearWheelPosition = transform.position + transform.rotation * new Vector3(0f, 0f, -1.43f);
+        DrawShape();
     }
 
     public static Vector3 CalculatePositionAfterMovement(Vector3 rearWheelPosition, float headingAngle,

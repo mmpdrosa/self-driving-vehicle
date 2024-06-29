@@ -3,8 +3,11 @@ using UnityEngine;
 public class Node : IHeapItem<Node>
 {
     public Vector3 RearWheelPosition { get; set; }
+
     public float HeadingAngle { get; set; }
+
     public Movement MovementInfo { get; set; }
+
     public Node Parent { get; set; }
 
     public float ChangingDirectionCost =>

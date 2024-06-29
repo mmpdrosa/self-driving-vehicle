@@ -11,7 +11,7 @@ public class ReedsShepp
         return path.Sum(movement => movement.Distance);
     }
 
-    public Path GetOptimalPath(float x1, float y1, float theta1, float x2, float y2, float theta2)
+    public static Path GetOptimalPath(float x1, float y1, float theta1, float x2, float y2, float theta2)
     {
         var paths = GetAllPaths(x1, y1, theta1, x2, y2, theta2);
 
@@ -20,7 +20,7 @@ public class ReedsShepp
         return optimalPath;
     }
 
-    public List<Path> GetAllPaths(float x1, float y1, float theta1, float x2, float y2, float theta2)
+    public static List<Path> GetAllPaths(float x1, float y1, float theta1, float x2, float y2, float theta2)
     {
         var pathFuncs = new List<Func<float, float, float, Path>>
             { Path1, Path2, Path3, Path4, Path5, Path6, Path7, Path8, Path9, Path10, Path11, Path12 };
@@ -93,7 +93,7 @@ public class ReedsShepp
         return (x, y, theta);
     }
 
-    private Path Path1(float x, float y, float phi)
+    private static Path Path1(float x, float y, float phi)
     {
         phi *= Mathf.Deg2Rad;
 
@@ -110,7 +110,7 @@ public class ReedsShepp
         return path;
     }
 
-    private Path Path2(float x, float y, float phi)
+    private static Path Path2(float x, float y, float phi)
     {
         phi = M(phi * Mathf.Deg2Rad);
 
@@ -135,7 +135,7 @@ public class ReedsShepp
         return path;
     }
 
-    private Path Path3(float x, float y, float phi)
+    private static Path Path3(float x, float y, float phi)
     {
         phi *= Mathf.Deg2Rad;
 
@@ -164,7 +164,7 @@ public class ReedsShepp
         return path;
     }
 
-    private Path Path4(float x, float y, float phi)
+    private static Path Path4(float x, float y, float phi)
     {
         phi *= Mathf.Deg2Rad;
 
@@ -193,7 +193,7 @@ public class ReedsShepp
         return path;
     }
 
-    private Path Path5(float x, float y, float phi)
+    private static Path Path5(float x, float y, float phi)
     {
         phi *= Mathf.Deg2Rad;
 
@@ -222,7 +222,7 @@ public class ReedsShepp
         return path;
     }
 
-    private Path Path6(float x, float y, float phi)
+    private static Path Path6(float x, float y, float phi)
     {
         phi *= Mathf.Deg2Rad;
 
@@ -264,7 +264,7 @@ public class ReedsShepp
         return path;
     }
 
-    private Path Path7(float x, float y, float phi)
+    private static Path Path7(float x, float y, float phi)
     {
         phi *= Mathf.Deg2Rad;
 
@@ -295,7 +295,7 @@ public class ReedsShepp
         return path;
     }
 
-    private Path Path8(float x, float y, float phi)
+    private static Path Path8(float x, float y, float phi)
     {
         phi *= Mathf.Deg2Rad;
 
@@ -325,7 +325,7 @@ public class ReedsShepp
         return path;
     }
 
-    private Path Path9(float x, float y, float phi)
+    private static Path Path9(float x, float y, float phi)
     {
         phi *= Mathf.Deg2Rad;
 
@@ -355,7 +355,7 @@ public class ReedsShepp
         return path;
     }
 
-    private Path Path10(float x, float y, float phi)
+    private static Path Path10(float x, float y, float phi)
     {
         phi *= Mathf.Deg2Rad;
 
@@ -384,7 +384,7 @@ public class ReedsShepp
         return path;
     }
 
-    private Path Path11(float x, float y, float phi)
+    private static Path Path11(float x, float y, float phi)
     {
         phi *= Mathf.Deg2Rad;
 
@@ -413,7 +413,7 @@ public class ReedsShepp
         return path;
     }
 
-    private Path Path12(float x, float y, float phi)
+    private static Path Path12(float x, float y, float phi)
     {
         phi *= Mathf.Deg2Rad;
 
@@ -452,9 +452,9 @@ public class ReedsShepp
     /// <returns>The adjusted angle phi in radians.</returns>
     private static float M(float theta)
     {
-        var phi = theta % (2f * Mathf.PI);
-        if (phi < -Mathf.PI) return phi + 2f * Mathf.PI;
-        if (phi >= Mathf.PI) return phi - 2f * Mathf.PI;
+        theta %= (2f * Mathf.PI);
+        if (theta < -Mathf.PI) return theta + 2f * Mathf.PI;
+        if (theta >= Mathf.PI) return theta - 2f * Mathf.PI;
         return theta;
     }
 

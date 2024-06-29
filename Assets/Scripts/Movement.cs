@@ -21,7 +21,7 @@ public class Movement
     {
         Distance = distance >= 0 ? distance : -distance;
         SteeringVal = steering;
-        GearVal = gear;
+        GearVal = distance >= 0 ? gear : (Gear)(-(int)gear);
     }
 
     public override string ToString()

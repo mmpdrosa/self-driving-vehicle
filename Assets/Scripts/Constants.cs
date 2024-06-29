@@ -24,4 +24,8 @@ public static class Constants
 
     public const float GoalDistanceThreshold = 0.5f;
     public const float GoalHeadingAngleThreshold = 15f;
+
+
+    public const float VoronoiAlpha = 10f;
+    public const float VoronoiMaxObstacleDistance = 50f;
 }

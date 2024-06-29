@@ -1,27 +1,46 @@
 using UnityEngine;
 
-public class AStarCell : IHeapItem<AStarCell>
+public class AStarCell : Cell, IHeapItem<AStarCell>
 {
-    public Vector2Int GridPosition { get; set; }
-    public Vector3 Position { get; set; }
-    public bool Walkable { get; set; }
-    public AStarCell Parent { get; set; }
+    public float gCost { get; private set; }
 
-    public float EuclideanDistance { get; set; }
+    public float hCost { get; private set; }
 
-    public float gCost { get; set; }
-    public float hCost { get; set; }
-    private float fCost => gCost + hCost;
+    public float fCost => gCost + hCost;
 
-    public float HolonomicHeuristic => fCost;
+    public AStarCell Parent { get; private set; }
 
     public int HeapIndex { get; set; }
 
-    public AStarCell(Vector2Int gridPosition, Vector3 position, bool walkable)
+    public AStarCell(Vector3 center, bool isWalkable, int x, int y) : base(center, isWalkable, x, y)
     {
-        GridPosition = gridPosition;
-        Position = position;
-        Walkable = walkable;
+    }
+
+    public AStarCell(AStarCell other) : base(other.Center, other.IsWalkable, other.GridPosition.x, other.GridPosition.y)
+    {
+        Center = other.Center;
+        IsWalkable = other.IsWalkable;
+        gCost = other.gCost;
+        hCost = other.hCost;
+        Parent = other.Parent;
+    }
+
+    public void SetCosts(float gCost, float hCost)
+    {
+        this.gCost = gCost;
+        this.hCost = hCost;
+    }
+
+    public void SetParent(AStarCell parent)
+    {
+        Parent = parent;
+    }
+
+    public void Reset()
+    {
+        Parent = null;
+        gCost = 0;
+        hCost = 0;
     }
 
     public int CompareTo(AStarCell other)

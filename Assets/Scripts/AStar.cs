@@ -2,25 +2,19 @@ using System.Collections.Generic;
 
 public class AStar
 {
-    private readonly AStartGrid _grid;
-
-    private readonly AStarCell[,] _cells;
-
-    public AStar(AStartGrid grid)
+    public static List<AStarCell> Run(Grid<AStarCell> grid, AStarCell startCell, AStarCell goalCell)
     {
-        _grid = grid;
-        _cells = grid.Cells;
-    }
-
-    public List<AStarCell> Run(AStarCell startCell, AStarCell goalCell)
-    {
-        if (!_grid.IsPositionWalkable(startCell.Position) ||
-            !_grid.IsPositionWalkable(goalCell.Position))
+        for (var i = 0; i < grid.Width; i++)
         {
-            return null;
+            for (var j = 0; j < grid.Height; j++)
+            {
+                var cell = grid.Cells[i, j];
+
+                cell.Reset();
+            }
         }
 
-        Heap<AStarCell> openSet = new(_grid.MaxSize);
+        Heap<AStarCell> openSet = new(grid.MaxSize);
         HashSet<AStarCell> closedSet = new();
 
         openSet.Add(startCell);
@@ -31,38 +25,61 @@ public class AStar
 
             closedSet.Add(currentCell);
 
-            foreach (var neighbour in GetNeighbours(currentCell))
+            foreach (var neighbor in GetNeighboringCells(grid, currentCell))
             {
-                if (!neighbour.Walkable || closedSet.Contains(neighbour))
+                if (!neighbor.IsWalkable) continue;
+
+                if (closedSet.Contains(neighbor)) continue;
+
+                var distanceToNeighbor = (currentCell.Center - neighbor.Center).magnitude;
+
+                var gCost = currentCell.gCost + distanceToNeighbor;
+
+                if (openSet.Contains(neighbor) && gCost >= neighbor.gCost) continue;
+
+                var distanceToGoal = (currentCell.Center - goalCell.Center).magnitude;
+
+                neighbor.SetCosts(gCost, hCost: distanceToGoal);
+                neighbor.SetParent(currentCell);
+
+                if (!openSet.Contains(neighbor))
                 {
-                    continue;
-                }
-
-                var gCost = currentCell.gCost + AStartGrid.GetDistance(neighbour, currentCell);
-
-                if (gCost < neighbour.gCost || !openSet.Contains(neighbour))
-                {
-                    neighbour.gCost = gCost;
-                    neighbour.hCost = AStartGrid.GetDistance(goalCell, currentCell);
-                    neighbour.Parent = currentCell;
-
-                    if (!openSet.Contains(neighbour))
-                    {
-                        openSet.Add(neighbour);
-                    }
+                    openSet.Add(neighbor);
                 }
             }
         }
 
-        return RetracePath(startCell, goalCell);
+        return RetracePath(goalCell);
     }
 
-    private static List<AStarCell> RetracePath(AStarCell startCell, AStarCell goalCell)
+    private static List<AStarCell> GetNeighboringCells(Grid<AStarCell> grid, Cell cell)
     {
-        List<AStarCell> path = new();
+        var neighbors = new List<AStarCell>();
+
+        var directions = Utils.DirectionsWithCorners;
+
+        foreach (var direction in directions)
+        {
+            var x = cell.GridPosition.x + direction.x;
+            var y = cell.GridPosition.y + direction.y;
+
+            if (!grid.TryGetCell(x, y, out var neighbor)) continue;
+
+            if (!neighbor.IsWalkable) continue;
+
+            neighbors.Add(neighbor);
+        }
+
+        return neighbors;
+    }
+
+    private static List<AStarCell> RetracePath(AStarCell goalCell)
+    {
+        var path = new List<AStarCell>();
+
         var currentCell = goalCell;
 
-        while (currentCell != startCell)
+        while (currentCell != null)
         {
             path.Add(currentCell);
             currentCell = currentCell.Parent;
@@ -73,29 +90,25 @@ public class AStar
         return path;
     }
 
-    private List<AStarCell> GetNeighbours(AStarCell cell)
+    public static float GetMaxCost(Grid<AStarCell> grid)
     {
-        List<AStarCell> neighbours = new();
+        var maxCost = float.MinValue;
 
-        for (var i = -1; i <= 1; i++)
+        for (var i = 0; i < grid.Width; i++)
         {
-            for (var j = -1; j <= 1; j++)
+            for (var j = 0; j < grid.Height; j++)
             {
-                if (i == 0 && j == 0)
-                {
-                    continue;
-                }
+                var cell = grid.Cells[i, j];
 
-                var checkX = cell.GridPosition.x + i;
-                var checkY = cell.GridPosition.y + j;
+                var cost = cell.fCost;
 
-                if (checkX >= 0 && checkX < _cells.GetLength(0) && checkY >= 0 && checkY < _cells.GetLength(1))
+                if (cost > maxCost)
                 {
-                    neighbours.Add(_cells[checkX, checkY]);
+                    maxCost = cell.fCost;
                 }
             }
         }
 
-        return neighbours;
+        return maxCost;
     }
 }

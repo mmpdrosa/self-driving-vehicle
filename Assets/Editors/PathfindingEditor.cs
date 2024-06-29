@@ -1,22 +1,23 @@
-//using System.Collections;
-//using System.Collections.Generic;
-//using UnityEngine;
-//using UnityEditor;
+using UnityEngine;
+using UnityEditor;
 
-//[CustomEditor(typeof(Pathfinding))]
-//public class PathfindingEditor : Editor
-//{
+[CustomEditor(typeof(HybridAStarScene))]
+public class PathfindingEditor : Editor
+{
+    public override void OnInspectorGUI()
+    {
+        var pathfinding = (HybridAStarScene)target;
 
-//    public override void OnInspectorGUI()
-//    {
-//        Pathfinding pathfinding = (Pathfinding)target;
+        DrawDefaultInspector();
 
-//        DrawDefaultInspector();
+        if (GUILayout.Button("Find Path."))
+        {
+            pathfinding.FindPath();
+        }
 
-//        if (GUILayout.Button("Clique para fazer algo"))
-//        {
-//            pathfinding.Find();
-//        }
-//    }   
-//}
-
+        if (GUILayout.Button("Recalculate Costs."))
+        {
+            pathfinding.RecalculateCosts();
+        }
+    }
+}

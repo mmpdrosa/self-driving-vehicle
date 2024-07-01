@@ -85,7 +85,7 @@ public class HybridAStar
 
                 // TODO: Make the weights configurable to allow for better tuning
                 child.hCost = euclideanCosts[x, y] + holonomicCosts[x, y] + 1.5f * flowFieldCosts[x, y] +
-                              15f * (1f + voronoiFieldCosts[x, y]);
+                              15f * (-1f + voronoiFieldCosts[x, y]);
 
                 var roundedChildHeadingAngle =
                     Utils.RoundValueToNearestStep(child.HeadingAngle, Constants.HeadingAngleStep);
